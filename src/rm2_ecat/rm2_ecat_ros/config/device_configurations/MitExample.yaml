@@ -1,0 +1,18 @@
+can_motors:
+  - can_id: 1
+    can_bus: 0
+    name: "test_motor"
+    type: "DM4310"
+    need_calibration: false
+#   - can_id: 2
+#     can_bus: 0
+#     name: "other_motor"
+#     type: "DM4310"
+#     need_calibration: false
+# gpios:
+#   - name: "output"
+#     pin: 0
+#     mode: 1
+#   - name: "input"
+#     pin: 1
+#     mode: 0

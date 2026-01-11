@@ -1,0 +1,5 @@
+float64 friction_speed
+float64 friction_change_speed
+float64 friction_change_speed_derivative
+bool has_shoot
+builtin_interfaces/Time stamp

@@ -1,0 +1,9 @@
+<library path="rm2_ecat_ros_plugin">
+    <class name="rm2_ecat_ros/RmEcatHardwareInterface"
+           type="rm2_ecat::RmEcatHardwareInterface"
+           base_class_type="hardware_interface::SystemInterface">
+        <description>
+            The rm2_ecat hardware using a system hardware interface-type for ros2_control.
+        </description>
+    </class>
+</library>

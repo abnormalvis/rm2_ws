@@ -1,0 +1,23 @@
+/controller_manager:
+  ros__parameters:
+    update_rate: 100
+
+    test_controller:
+      type: pid_controller/PidController
+    # test_controller:
+    #   type: effort_controllers/JointGroupEffortController
+
+/test_controller:
+  ros__parameters:
+    dof_names:
+    - right_front_wheel_joint
+
+    command_interface: effort
+
+    reference_and_state_interfaces: 
+    - velocity
+
+    gains:
+      right_front_wheel_joint: {p: 0.5, i: 0.0, d: 0.0, feedforward_gain: 1.0}
+    # joints:
+    # - right_front_wheel_joint

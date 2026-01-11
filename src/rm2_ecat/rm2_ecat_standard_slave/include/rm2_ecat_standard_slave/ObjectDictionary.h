@@ -1,0 +1,9 @@
+//
+// Created by qiayuan on 23-5-14.
+//
+
+#define OD_INDEX_CONTROLWORD (0x6040)
+#define OD_INDEX_STATUSWORD (0x6041)
+#define OD_INDEX_CAN0_IMU_TRIGGER (0x2001)
+#define OD_INDEX_CAN1_IMU_TRIGGER (0x2002)
+#define OD_INDEX_GPIO_MODES (0x2003)

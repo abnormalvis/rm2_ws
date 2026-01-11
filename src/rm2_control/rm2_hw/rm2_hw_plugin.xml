@@ -1,0 +1,9 @@
+<library path="rm2_hw_plugin">
+    <class name="rm2_hw/RmHardwareSystem"
+           type="rm2_hw::RmHardwareSystem"
+           base_class_type="hardware_interface::SystemInterface">
+        <description>
+            The rm2 system hardware using a system hardware interface-type for ros2_control.
+        </description>
+    </class>
+</library>

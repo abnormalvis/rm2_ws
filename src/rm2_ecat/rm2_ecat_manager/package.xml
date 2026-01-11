@@ -1,0 +1,25 @@
+<?xml version="1.0"?>
+
+<package format="3">
+    <name>rm2_ecat_manager</name>
+    <version>1.0.2</version>
+    <description>Core C++ library to interface one or multiple drives. Contains abstract base classes for the
+        communication interface.
+    </description>
+
+    <license>GPLv3</license>
+    <author email="liaoqiayuan@gmail.com">Qiayuan Liao</author>
+    <maintainer email="liaoqiayuan@gmail.com">Qiayuan Liao</maintainer>
+    <url type="website">https://github.com/gdut-dynamic-x/rm_ecat</url>
+
+    <buildtool_depend>ament_cmake</buildtool_depend>
+  
+    <depend>rm2_ecat_standard_slave</depend>
+    <depend>rm2_ecat_mit</depend>
+    <depend>ecat_manager</depend>
+    <depend>yaml-cpp</depend>
+
+    <export>
+        <build_type>ament_cmake</build_type>
+    </export>
+</package>

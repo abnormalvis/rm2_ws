@@ -1,0 +1,22 @@
+<?xml version="1.0"?>
+
+<package format="3">
+    <name>rm2_ecat_standard_slave</name>
+    <version>1.0.2</version>
+    <description>RM Ethercat implementation.</description>
+
+    <license>GPLv3</license>
+    <author email="liaoqiayuan@gmail.com">Qiayuan Liao</author>
+    <maintainer email="liaoqiayuan@gmail.com">Qiayuan Liao</maintainer>
+    <url type="website">https://github.com/gdut-dynamic-x/rm_ecat</url>
+
+    <buildtool_depend>ament_cmake</buildtool_depend>
+  
+    <depend>soem_interface_rsl</depend>
+    <depend>rm2_msgs</depend>
+    <depend>yaml-cpp</depend>
+
+    <export>
+        <build_type>ament_cmake</build_type>
+    </export>
+</package>

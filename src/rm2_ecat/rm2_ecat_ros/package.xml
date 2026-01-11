@@ -1,0 +1,33 @@
+<?xml version="1.0"?>
+
+<package format="2">
+    <name>rm2_ecat_ros</name>
+    <version>1.0.1</version>
+    <description>TOOD</description>
+
+    <license>GPLv3</license>
+    <author email="liaoqiayuan@gmail.com">Qiayuan Liao</author>
+    <maintainer email="liaoqiayuan@gmail.com">Qiayuan Liao</maintainer>
+    <url type="website">https://github.com/qiayuanliao/cleardrive</url>
+
+    <buildtool_depend>ament_cmake</buildtool_depend>
+  
+    <depend>launch</depend>
+    <depend>launch_ros</depend>
+    <depend>rclcpp</depend>
+    <depend>rm2_ecat_manager</depend>
+    <depend>rm2_ecat_msgs</depend>
+    <depend>any_node</depend>
+    <depend>controller_manager</depend>
+    <depend>urdf</depend>
+    <depend>transmission_interface</depend>
+    <depend>joint_limits</depend>
+    <depend>rm2_common</depend>
+    <depend>yaml-cpp</depend>
+    <depend>pluginlib</depend>
+    <depend>realtime_tools</depend>
+
+    <export>
+        <build_type>ament_cmake</build_type>
+    </export>
+</package>

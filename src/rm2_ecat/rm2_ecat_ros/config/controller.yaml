@@ -1,0 +1,12 @@
+test_pid_controller:
+  ros__parameters:
+    type: pid_controller/PidController
+    dof_names:
+      - test_joint
+
+    command_interface: effort
+
+    reference_and_state_interfaces: ["velocity"]
+
+    gains:
+      test_joint: {p: 0.3, i: 0.2, d: 0.0, u_clamp_max: 4.0, u_clamp_min: -4.0, activate_state_publisher: true}

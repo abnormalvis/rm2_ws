@@ -1,0 +1,23 @@
+<?xml version="1.0"?>
+
+<package format="3">
+    <name>rm2_ecat_msgs</name>
+    <version>1.0.2</version>
+    <description>The rm2_ecat_msgs package provides the ROS messages</description>
+    <maintainer email="liaoqiayuan@gmail.com">qiayuan</maintainer>
+    <license>BSD</license>
+
+    <buildtool_depend>ament_cmake</buildtool_depend>
+    <buildtool_depend>rosidl_default_generators</buildtool_depend>
+
+    <exec_depend>rosidl_default_runtime</exec_depend>
+
+    <depend>geometry_msgs</depend>
+    <depend>sensor_msgs</depend>
+
+    <member_of_group>rosidl_interface_packages</member_of_group>
+
+    <export>
+        <build_type>ament_cmake</build_type>
+    </export>
+</package>
