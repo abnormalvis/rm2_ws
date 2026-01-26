@@ -82,14 +82,7 @@ class RmEcatHardwareInterface final : public hardware_interface::SystemInterface
   std::unordered_map<std::string, TransmissionData> actuator_transmission_interfaces_;
 
   std::shared_ptr<rclcpp::Node> node_;
-  std::list<ActData> act_data_list_;
-  std::list<ImuData> imu_data_list_;
-  ActuatorStateMap act_state_map_;
-  ActuatorExtraMap act_extra_map_;
-  ImuSensorMap imu_sensor_map_;
-  GpioStateMap gpio_state_map_;
-  std::list<bool> digital_input_list_;
-  std::list<bool> digital_output_list_;
+
 };
 
 }  // namespace rm2_ecat
