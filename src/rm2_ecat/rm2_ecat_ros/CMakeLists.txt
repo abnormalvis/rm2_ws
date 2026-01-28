@@ -94,9 +94,6 @@ install(DIRECTORY launch
 install(DIRECTORY config
         DESTINATION share/${PROJECT_NAME}
 )
-# install(FILES rm2_ecat_ros_plugin.xml
-#     DESTINATION share/${PROJECT_NAME}
-# )
 
 pluginlib_export_plugin_description_file(hardware_interface rm2_ecat_ros_plugin.xml)
 

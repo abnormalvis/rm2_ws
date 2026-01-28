@@ -2,21 +2,12 @@
 // Created by qiayuan on 23-4-16.
 //
 
+#include <hardware_interface/types/hardware_interface_type_values.hpp>
+#include <transmission_interface/transmission_interface_exception.hpp>
+#include <pluginlib/class_list_macros.hpp>
+
 #include "rm2_ecat_ros/RmEcatHardwareInterface.h"
 #include "rm2_ecat_ros/RosMsgConversions.h"
-#include "rm2_ecat_ros/types.h"
-#include "rm2_msgs/msg/bus_state.hpp"
-
-#include <hardware_interface/types/hardware_interface_type_values.hpp>
-#include <joint_limits/joint_limits.hpp>
-#include <joint_limits/joint_limits_urdf.hpp>
-#include <memory>
-#include <message_logger/log/log_messages.hpp>
-#include <rclcpp/logging.hpp>
-#include <rclcpp/node.hpp>
-#include <string>
-#include <unordered_map>
-#include <pluginlib/class_list_macros.hpp>
 
 namespace rm2_ecat {
 CallbackReturn RmEcatHardwareInterface::on_init(const hardware_interface::HardwareComponentInterfaceParams & params) {
@@ -180,11 +171,11 @@ void RmEcatHardwareInterface::setupActuators() {
     set_state(motorNames.at(i) + "/act_state/pos", 0.);
     set_state(motorNames.at(i) + "/act_state/vel", 0.);
     set_state(motorNames.at(i) + "/act_state/eff", 0.);
-    set_state(motorNames.at(i) + "/act_extra/offset", 0.);    
-    set_state(motorNames.at(i) + "/act_extra/halted", false);
-    set_state(motorNames.at(i) + "/act_extra/need_calibration", static_cast<bool>(motorNeedCalibrations.at(i)));
-    set_state(motorNames.at(i) + "/act_extra/calibrated", false);
-    set_state(motorNames.at(i) + "/act_extra/calibration_reading", false);
+    set_command(motorNames.at(i) + "/act_extra/offset", 0.);    
+    set_command(motorNames.at(i) + "/act_extra/halted", false);
+    set_command(motorNames.at(i) + "/act_extra/need_calibration", static_cast<bool>(motorNeedCalibrations.at(i)));
+    set_command(motorNames.at(i) + "/act_extra/calibrated", false);
+    set_command(motorNames.at(i) + "/act_extra/calibration_reading", false);
     set_command(motorNames.at(i) + "/act_command/command", 0.);
     set_command(motorNames.at(i) + "/act_command/command_unlimited", 0.);
   }
@@ -198,11 +189,11 @@ void RmEcatHardwareInterface::setupActuators() {
     set_state(motorNames.at(i) + "/act_state/pos", 0.);
     set_state(motorNames.at(i) + "/act_state/vel", 0.);
     set_state(motorNames.at(i) + "/act_state/eff", 0.);
-    set_state(motorNames.at(i) + "/act_extra/offset", 0.);    
-    set_state(motorNames.at(i) + "/act_extra/halted", false);
-    set_state(motorNames.at(i) + "/act_extra/need_calibration", static_cast<bool>(motorNeedCalibrations.at(i)));
-    set_state(motorNames.at(i) + "/act_extra/calibrated", false);
-    set_state(motorNames.at(i) + "/act_extra/calibration_reading", false);
+    set_command(motorNames.at(i) + "/act_extra/offset", 0.);    
+    set_command(motorNames.at(i) + "/act_extra/halted", false);
+    set_command(motorNames.at(i) + "/act_extra/need_calibration", static_cast<bool>(motorNeedCalibrations.at(i)));
+    set_command(motorNames.at(i) + "/act_extra/calibrated", false);
+    set_command(motorNames.at(i) + "/act_extra/calibration_reading", false);
     set_command(motorNames.at(i) + "/act_command/command", 0.);
     set_command(motorNames.at(i) + "/act_command/command_unlimited", 0.);
   }
@@ -236,7 +227,7 @@ bool RmEcatHardwareInterface::setupTransmission() {
 
     std::vector<transmission_interface::ActuatorHandle> actuator_handles;
     for (const auto& actuator_info : transmission_info.actuators) {
-      set_state(actuator_info.name + "/act_extra/offset", actuator_info.offset);
+      set_command(actuator_info.name + "/act_extra/offset", actuator_info.offset);
       const auto actuator_interface =
           actuator_transmission_interfaces_.emplace_hint(actuator_transmission_interfaces_.end(), std::make_pair(actuator_info.name, TransmissionData()));
       actuator_handles.emplace_back(actuator_info.name, hardware_interface::HW_IF_POSITION,
@@ -360,28 +351,6 @@ std::vector<hardware_interface::InterfaceDescription> RmEcatHardwareInterface::e
     }
   }
 
-  std::unordered_map<std::string, std::string> act_extra_interface_type{{"offset", "double"},
-                                                                        {"halted", "bool"}, 
-                                                                        {"need_calibration", "bool"},
-                                                                        {"calibrated", "bool"}, 
-                                                                        {"calibration_reading", "bool"}}; 
-  for (auto motor_name : rmStandardSlaveManager_->getMotorNames()) {
-    for (auto it : act_extra_interface_type) {
-      hardware_interface::InterfaceInfo act_extra_interface;
-      act_extra_interface.name = "act_extra/" + it.first;
-      act_extra_interface.data_type = it.second;
-      ecat_unlisted_state_interfaces.emplace_back(motor_name, act_extra_interface);
-    }
-  }
-  for (auto motor_name : rmMitSlaveManager_->getMotorNames()) {
-    for (auto it : act_extra_interface_type) {
-      hardware_interface::InterfaceInfo act_extra_interface;
-      act_extra_interface.name = "act_extra/" + it.first;
-      act_extra_interface.data_type = it.second;
-      ecat_unlisted_state_interfaces.emplace_back(motor_name, act_extra_interface);
-    }
-  }
-
   std::unordered_map<std::string, std::string> imu_sensor_interface_type{{"orientation/x", "double"}, 
                                                                          {"orientation/y", "double"},
                                                                          {"orientation/z", "double"}, 
@@ -440,7 +409,11 @@ std::vector<hardware_interface::InterfaceDescription> RmEcatHardwareInterface::e
 
   std::unordered_map<std::string, std::string> act_command_interface_type{{"command", "double"}, 
                                                                           {"command_unlimited", "double"}}; 
-
+  std::unordered_map<std::string, std::string> act_extra_interface_type{{"offset", "double"},
+                                                                        {"halted", "bool"}, 
+                                                                        {"need_calibration", "bool"},
+                                                                        {"calibrated", "bool"}, 
+                                                                        {"calibration_reading", "bool"}}; 
   for (auto motor_name : rmStandardSlaveManager_->getMotorNames()) {
     for (auto it : act_command_interface_type) {
       hardware_interface::InterfaceInfo act_command_interface;
@@ -448,6 +421,12 @@ std::vector<hardware_interface::InterfaceDescription> RmEcatHardwareInterface::e
       act_command_interface.data_type = it.second;
       ecat_unlisted_command_interfaces.emplace_back(motor_name, act_command_interface);
     }
+    for (auto it : act_extra_interface_type) {
+      hardware_interface::InterfaceInfo act_extra_interface;
+      act_extra_interface.name = "act_extra/" + it.first;
+      act_extra_interface.data_type = it.second;
+      ecat_unlisted_command_interfaces.emplace_back(motor_name, act_extra_interface);
+    }    
   }
   for (auto motor_name : rmMitSlaveManager_->getMotorNames()) {
     for (auto it : act_command_interface_type) {
@@ -456,6 +435,12 @@ std::vector<hardware_interface::InterfaceDescription> RmEcatHardwareInterface::e
       act_command_interface.data_type = it.second;
       ecat_unlisted_command_interfaces.emplace_back(motor_name, act_command_interface);
     }
+    for (auto it : act_extra_interface_type) {
+      hardware_interface::InterfaceInfo act_extra_interface;
+      act_extra_interface.name = "act_extra/" + it.first;
+      act_extra_interface.data_type = it.second;
+      ecat_unlisted_command_interfaces.emplace_back(motor_name, act_extra_interface);
+    }    
   }
 
   std::unordered_map<std::string, std::string> gpio_interface_type{{"type", "double"}, 
@@ -491,8 +476,8 @@ hardware_interface::return_type RmEcatHardwareInterface::read(const rclcpp::Time
 
   size_t num_motors = rmStandardSlaveManager_->getMotorNames().size();
   for (size_t i = 0; i < num_motors; ++i) {
-    set_state(rmMotorNames.at(i) + "/act_extra/halted", !rmMotorIsOnlines.at(i));
-    set_state(rmMotorNames.at(i) + "/act_state/pos", rmMotorPositions.at(i) + get_state(rmMotorNames.at(i) + "/act_extra/offset"));
+    set_command(rmMotorNames.at(i) + "/act_extra/halted", !rmMotorIsOnlines.at(i));
+    set_state(rmMotorNames.at(i) + "/act_state/pos", rmMotorPositions.at(i) + get_command(rmMotorNames.at(i) + "/act_extra/offset"));
     set_state(rmMotorNames.at(i) + "/act_state/vel", rmMotorVelocities.at(i));
     set_state(rmMotorNames.at(i) + "/act_state/eff", rmMotorTorques.at(i));
   }
@@ -506,8 +491,8 @@ hardware_interface::return_type RmEcatHardwareInterface::read(const rclcpp::Time
   
   num_motors = rmMitSlaveManager_->getMotorNames().size();
   for (size_t i = 0; i < num_motors; ++i) {
-    set_state(mitMotorNames.at(i) + "/act_extra/halted", !mitMotorIsOnlines.at(i));
-    set_state(mitMotorNames.at(i) + "/act_state/pos", mitMotorPositions.at(i) + get_state(mitMotorNames.at(i) + "/act_extra/offset"));
+    set_command(mitMotorNames.at(i) + "/act_extra/halted", !mitMotorIsOnlines.at(i));
+    set_state(mitMotorNames.at(i) + "/act_state/pos", mitMotorPositions.at(i) + get_command(mitMotorNames.at(i) + "/act_extra/offset"));
     set_state(mitMotorNames.at(i) + "/act_state/vel", mitMotorVelocities.at(i));
     set_state(mitMotorNames.at(i) + "/act_state/eff", mitMotorTorques.at(i));
   }
@@ -535,14 +520,14 @@ hardware_interface::return_type RmEcatHardwareInterface::read(const rclcpp::Time
 
   for (const auto& transmission_info : info_.transmissions) {
     for (const auto& joint_info : transmission_info.joints) {
-      set_state(joint_info.name + "/position", joint_transmission_interfaces_.at(joint_info.name).state[0]);
-      set_state(joint_info.name + "/velocity", joint_transmission_interfaces_.at(joint_info.name).state[1]);
-      set_state(joint_info.name + "/effort", joint_transmission_interfaces_.at(joint_info.name).state[2]);
+      set_state(joint_info.name + "/" + hardware_interface::HW_IF_POSITION, joint_transmission_interfaces_.at(joint_info.name).state[0]);
+      set_state(joint_info.name + "/" + hardware_interface::HW_IF_VELOCITY, joint_transmission_interfaces_.at(joint_info.name).state[1]);
+      set_state(joint_info.name + "/" + hardware_interface::HW_IF_EFFORT, joint_transmission_interfaces_.at(joint_info.name).state[2]);
     }
   }
   
   for (auto& joint : info_.joints) {
-    set_command(joint.name + "/effort", 0.);  // Set all cmd to zero to avoid crazy soft limit oscillation when not controller loaded
+    set_command(joint.name + "/" + hardware_interface::HW_IF_EFFORT, 0.);  // Set all cmd to zero to avoid crazy soft limit oscillation when not controller loaded
   }
   // Imus
   const auto imuOrientations = rmStandardSlaveManager_->getImuOrientations();
@@ -640,7 +625,7 @@ hardware_interface::return_type RmEcatHardwareInterface::write(const rclcpp::Tim
   for (const auto& transmission_info : info_.transmissions) {
     for (const auto& actuator_info : transmission_info.actuators) {
       set_command(actuator_info.name + "/act_command/command", actuator_transmission_interfaces_.at(actuator_info.name).command[2]);
-      if (get_state<bool>(actuator_info.name + "/act_extra/need_calibration") && !get_state<bool>(actuator_info.name + "act_extra/calibrated")) {
+      if (get_command<bool>(actuator_info.name + "/act_extra/need_calibration") && !get_command<bool>(actuator_info.name + "act_extra/calibrated")) {
         set_command(actuator_info.name + "/act_command/command", get_command(actuator_info.name + "/act_command/command_unlimited"));
       }
     }
