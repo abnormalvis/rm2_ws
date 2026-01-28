@@ -1,0 +1,9 @@
+<library path="rm2_calibration_controllers">
+    <class name="rm2_calibration_controllers/MechanicalCalibrationController"
+           type="rm2_calibration_controllers::MechanicalCalibrationController"
+           base_class_type="controller_interface::ControllerInterface">
+        <description>
+            The rm2_calibration_controller using mechanical limit for calibration.
+        </description>
+    </class>
+</library>
