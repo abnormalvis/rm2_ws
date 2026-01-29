@@ -30,23 +30,6 @@ CallbackReturn RmEcatHardwareInterface::on_init(const hardware_interface::Hardwa
   for (const auto& busName : busNames_) {
     busIsOk_.emplace(busName, true);
   }
-  busStatesPublisher_ = std::make_shared<any_node::ThreadedPublisher<rm2_msgs::msg::BusState>>(
-      node_->create_publisher<rm2_msgs::msg::BusState>("bus_state", 10), 10, false);
-  if (!rmStandardSlaveManager_->getDigitalOutputNames().empty()) {
-    rmGpioOutputsPublisher_ = std::make_shared<any_node::ThreadedPublisher<rm2_msgs::msg::GpioData>>(
-        node_->create_publisher<rm2_msgs::msg::GpioData>("gpio_expect_outputs/rm", 10), 20, false);
-  }
-  if (!rmMitSlaveManager_->getDigitalOutputNames().empty()) {
-    mitGpioOutputsPublisher_ = std::make_shared<any_node::ThreadedPublisher<rm2_msgs::msg::GpioData>>(
-        node_->create_publisher<rm2_msgs::msg::GpioData>("gpio_expect_outputs/mit", 10), 20, false);
-  }
-
-  if (!rmStandardSlaveManager_->startup()) {
-    return CallbackReturn::ERROR;
-  }
-  if (!rmMitSlaveManager_->startup()) {
-    return CallbackReturn::ERROR;
-  }
 
   updateWorker_ = std::make_shared<any_worker::Worker>("updateWorker", rmStandardSlaveManager_->getTimeStep(),
                                                         [this](auto && PH1) { return updateWorkerCb(std::forward<decltype(PH1)>(PH1)); });
@@ -79,9 +62,6 @@ CallbackReturn RmEcatHardwareInterface::on_configure(const rclcpp_lifecycle::Sta
   setupImus();
   setupGpios();
 
-  updateWorker_->start(48);
-  publishWorker_->start(20);
-
   return hardware_interface::CallbackReturn::SUCCESS;
 }
     
@@ -90,7 +70,29 @@ CallbackReturn RmEcatHardwareInterface::on_activate(const rclcpp_lifecycle::Stat
   if (hardware_interface::SystemInterface::on_activate(previous_state) != CallbackReturn::SUCCESS) {
     return CallbackReturn::ERROR;
   }
-  MELO_INFO("on_activate called");
+  if (manualShutdown_) {
+    busManager_->startupCommunication();
+    manualShutdown_ = false;
+  }    
+  busStatesPublisher_ = std::make_shared<any_node::ThreadedPublisher<rm2_msgs::msg::BusState>>(
+      node_->create_publisher<rm2_msgs::msg::BusState>("bus_state", 10), 10, false);
+  if (!rmStandardSlaveManager_->getDigitalOutputNames().empty()) {
+    rmGpioOutputsPublisher_ = std::make_shared<any_node::ThreadedPublisher<rm2_msgs::msg::GpioData>>(
+        node_->create_publisher<rm2_msgs::msg::GpioData>("gpio_expect_outputs/rm", 10), 20, false);
+  }
+  if (!rmMitSlaveManager_->getDigitalOutputNames().empty()) {
+    mitGpioOutputsPublisher_ = std::make_shared<any_node::ThreadedPublisher<rm2_msgs::msg::GpioData>>(
+        node_->create_publisher<rm2_msgs::msg::GpioData>("gpio_expect_outputs/mit", 10), 20, false);
+  }
+  if (!rmStandardSlaveManager_->startup()) {
+    return CallbackReturn::ERROR;
+  }
+  if (!rmMitSlaveManager_->startup()) {
+    return CallbackReturn::ERROR;
+  }
+  updateWorker_->start(48);
+  publishWorker_->start(20);  
+
   return hardware_interface::CallbackReturn::SUCCESS;
 }
     
@@ -99,7 +101,18 @@ CallbackReturn RmEcatHardwareInterface::on_deactivate(const rclcpp_lifecycle::St
   if (hardware_interface::SystemInterface::on_deactivate(previous_state) != CallbackReturn::SUCCESS) {
     return CallbackReturn::ERROR;
   }
-  MELO_INFO("on_deactivate called");
+  manualShutdown_ = true;
+  updateWorker_->stop(true);
+  publishWorker_->stop(true);
+  rmStandardSlaveManager_->shutdown();
+  rmMitSlaveManager_->shutdown();
+  busStatesPublisher_->shutdown();
+  if (rmGpioOutputsPublisher_) {
+    rmGpioOutputsPublisher_->shutdown();
+  }
+  if (mitGpioOutputsPublisher_) {
+    mitGpioOutputsPublisher_->shutdown();
+  }
   return hardware_interface::CallbackReturn::SUCCESS;
 }
 
@@ -142,14 +155,19 @@ bool RmEcatHardwareInterface::publishWorkerCb(const any_worker::WorkerEvent& /*u
 }
 
 void RmEcatHardwareInterface::handleSignal(int /*signum*/) {
-  updateWorker_->stop();
-  publishWorker_->stop();
+  manualShutdown_ = true;  
+  updateWorker_->stop(true);
+  publishWorker_->stop(true);
   rmStandardSlaveManager_->shutdown();
   rmMitSlaveManager_->shutdown();
   busStatesPublisher_->shutdown();
-  rmGpioOutputsPublisher_->shutdown();
-  mitGpioOutputsPublisher_->shutdown();
-  // TODO(ch): set hardware interface deactivate
+  if (rmGpioOutputsPublisher_) {
+    rmGpioOutputsPublisher_->shutdown();
+  }
+  if (mitGpioOutputsPublisher_) {
+    mitGpioOutputsPublisher_->shutdown();
+  }
+  rclcpp::shutdown();
 }
 
 bool RmEcatHardwareInterface::loadUrdf(std::shared_ptr<rclcpp::Node> node) {
@@ -157,7 +175,11 @@ bool RmEcatHardwareInterface::loadUrdf(std::shared_ptr<rclcpp::Node> node) {
     urdf_model_ = std::make_shared<urdf::Model>();
   }
   // get the urdf param on param server
-  urdf_string_ = node->declare_parameter("robot_description", "");
+  if (node_->has_parameter("robot_description")) {
+    urdf_string_ = node->get_parameter("robot_description").as_string();
+  } else {
+    urdf_string_ = node->declare_parameter("robot_description", "");
+  }
   return !urdf_string_.empty() && urdf_model_->initString(urdf_string_);
 }
 
@@ -686,30 +708,33 @@ hardware_interface::return_type RmEcatHardwareInterface::write(const rclcpp::Tim
   rmMitSlaveManager_->stageDigitalOutputs(mit_digital_outputs);
 
   // bus monitoring
-  if (busDiagDecimationCount_ > 100) {
-    rm2_msgs::msg::BusState busStatesMsg_;
-    for (const auto& bus : busNames_) {
-      if (!busIsOk_.at(bus)) {
-        if (busManager_->onActivate(bus)) {
-          busIsOk_.at(bus) = true;
+  if (!manualShutdown_) {
+    if (busDiagDecimationCount_ > 100) {
+      rm2_msgs::msg::BusState busStatesMsg_;
+      for (const auto& bus : busNames_) {
+        if (!busIsOk_.at(bus)) {
+          if (busManager_->onActivate(bus)) {
+            busIsOk_.at(bus) = true;
+          }
         }
+        if (!busManager_->busMonitoring(bus) && busIsOk_.at(bus)) {
+          MELO_ERROR("Bus is not ok");
+          busManager_->onDeactivate(bus);
+          busIsOk_.at(bus) = false;
+        }
+        busStatesMsg_.name.push_back(bus);
+        busStatesMsg_.is_online.push_back(busIsOk_.at(bus));
+        busStatesMsg_.stamp = node_->now();
       }
-      if (!busManager_->busMonitoring(bus) && busIsOk_.at(bus)) {
-        MELO_ERROR("Bus is not ok");
-        busManager_->onDeactivate(bus);
-        busIsOk_.at(bus) = false;
+      if (busStatesPublisher_) {
+        busStatesPublisher_->publish(busStatesMsg_);
       }
-      busStatesMsg_.name.push_back(bus);
-      busStatesMsg_.is_online.push_back(busIsOk_.at(bus));
-      busStatesMsg_.stamp = node_->now();
+      busStatesMsgUpdated_ = true;
+      busDiagDecimationCount_ = 0;
     }
-    if (busStatesPublisher_) {
-      busStatesPublisher_->publish(busStatesMsg_);
-    }
-    busStatesMsgUpdated_ = true;
-    busDiagDecimationCount_ = 0;
+    busDiagDecimationCount_++;
   }
-  busDiagDecimationCount_++;
+
   return hardware_interface::return_type::OK;
 }
 

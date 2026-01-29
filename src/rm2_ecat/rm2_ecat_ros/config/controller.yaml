@@ -1,27 +1,21 @@
-joint_state_broadcaster:
+test_pid_controller:
   ros__parameters:
-    joints: 
+    dof_names:
       - test_joint
-    interfaces: ["position", "velocity", "effort"]
 
-# test_pid_controller:
+    command_interface: effort
+
+    reference_and_state_interfaces: ["velocity"]
+
+    gains:
+      test_joint: {p: 0.3, i: 0.2, d: 0.0, u_clamp_max: 4.0, u_clamp_min: -4.0, activate_state_publisher: true}
+
+# test_calibration_controller:
 #   ros__parameters:
-#     dof_names:
-#       - test_joint
-
-#     command_interface: effort
-
-#     reference_and_state_interfaces: ["velocity"]
-
-#     gains:
-#       test_joint: {p: 0.3, i: 0.2, d: 0.0, u_clamp_max: 4.0, u_clamp_min: -4.0, activate_state_publisher: true}
-
-test_calibration_controller:
-  ros__parameters:
-    joint: test_joint
-    actuator: test_motor
-    # center: true
-    velocity_search: 4.0
-    velocity:
-      pid: {p: 0.5, i: 0.0, d: 0.0, u_clamp_max: 2.0, u_clamp_min: -2.0}
-      vel_threshold: 0.001
+#     joint: test_joint
+#     actuator: test_motor
+#     # center: true
+#     velocity_search: 4.0
+#     velocity:
+#       pid: {p: 0.5, i: 0.0, d: 0.0, u_clamp_max: 2.0, u_clamp_min: -2.0}
+#       vel_threshold: 0.001

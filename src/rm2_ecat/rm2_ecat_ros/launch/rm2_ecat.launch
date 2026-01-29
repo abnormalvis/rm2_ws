@@ -6,6 +6,7 @@
     <node pkg="controller_manager" exec="ros2_control_node" output="screen" launch-prefix="ethercat_grant">
         <param name="robot_description" value="$(command 'xacro /home/ch/rm2_ws/src/rm2_ecat/rm2_ecat_ros/urdf/test.urdf.xacro')"/>
         <param name="setupFile" value="$(find-pkg-share rm2_ecat_ros)/config/setup.yaml"/>
+        <param name="controllerConfigFile" value="$(find-pkg-share rm2_ecat_ros)/config/setup.yaml"/>
         <param from="$(find-pkg-share rm2_ecat_ros)/config/controller_manager.yaml"/>
         <param from="$(find-pkg-share rm2_ecat_ros)/config/controller.yaml"/>
     </node>

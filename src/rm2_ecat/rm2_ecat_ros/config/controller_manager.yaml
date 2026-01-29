@@ -1,12 +1,12 @@
 /controller_manager:
   ros__parameters:
-    update_rate: 100
+    update_rate: 1000
 
     joint_state_broadcaster:
       type: joint_state_broadcaster/JointStateBroadcaster
 
-    # test_pid_controller:
-    #   type: pid_controller/PidController
+    test_pid_controller:
+      type: pid_controller/PidController
 
-    test_calibration_controller:
-      type: rm2_calibration_controllers/MechanicalCalibrationController
+    # test_calibration_controller:
+    #   type: rm2_calibration_controllers/MechanicalCalibrationController

@@ -50,6 +50,7 @@ class RmEcatHardwareInterface final : public hardware_interface::SystemInterface
   std::set<std::string> busNames_;
   std::map<std::string, bool> busIsOk_;
   int busDiagDecimationCount_ = 0;
+  bool manualShutdown_ = false;
   std::shared_ptr<rm2_ecat::standard::RmStandardSlaveManagerRos> rmStandardSlaveManager_;
   std::shared_ptr<rm2_ecat::mit::RmMitSlaveManagerRos> rmMitSlaveManager_;
 
