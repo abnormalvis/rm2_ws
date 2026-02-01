@@ -1,32 +1,32 @@
 #pragma once
 
 #include "geometry_msgs/msg/transform_stamped.hpp"
+#include "rm2_gimbal_controllers/bullet_solver.h"
+#include "rm2_msgs/msg/gimbal_cmd.hpp"
+#include <array>
 #include <control_msgs/srv/query_calibration_state.hpp>
 #include <control_toolbox/pid_ros.hpp>
 #include <controller_interface/controller_interface.hpp>
-#include <controller_interface/controller_interface_base.hpp>
 #include <ctime>
 #include <hardware_interface/hardware_component_interface.hpp>
 #include <hardware_interface/loaned_command_interface.hpp>
 #include <hardware_interface/loaned_state_interface.hpp>
 #include <joint_limits/joint_limits.hpp>
+#include <limits>
+#include <memory>
 #include <rclcpp/duration.hpp>
 #include <rclcpp/rclcpp.hpp>
 #include <rclcpp/time.hpp>
-#include <rm2_msgs/msg/gimbal_cmd.hpp>
-#include <rm2_msgs/msg/track_data.h>
+#include <realtime_tools/realtime_buffer.h>
+#include <rm2_msgs/msg/gimbal_des_error.hpp>
 #include <rm2_msgs/msg/track_data.hpp>
 #include <sstream>
+#include <string>
 #include <tf2_ros/buffer.h>
-#include <tf2_ros/transform_broadcaster.hpp>
-#include <tf2_ros/transform_listener.h>
 #include <tf2_ros/transform_broadcaster.h>
-#include <tf2_ros/transform_listener.hpp>
-#include <geometry_msgs/msg/transform_stamped.hpp>
+#include <tf2_ros/transform_listener.h>
 #include <unordered_map>
 #include <vector>
-#include <string>
-#include <memory>
 namespace rm2_gimbal_controllers {
 
 // 控制模式枚举
@@ -34,13 +34,47 @@ enum ControlMode { RATE = 0, TRACK, DIRECT };
 
 // 关节限位结构体
 struct JointLimits {
-  double max_position = 1e16;
-  double min_position = -1e16;
-  double max_velocity = 1e16;
-  double max_effort = 1e16;
+  double max_position = std::numeric_limits<double>::max();
+  double min_position = -std::numeric_limits<double>::max();
+  double max_velocity = std::numeric_limits<double>::max();
+  double max_effort = std::numeric_limits<double>::max();
   bool has_position_limits = false;
   bool has_velocity_limits = false;
   bool has_effort_limits = false;
+};
+
+// IMU类
+class IMUNode {
+public:
+  IMUNode()
+      : imu_angular_velocity_x_(nullptr), imu_angular_velocity_y_(nullptr),
+        imu_angular_velocity_z_(nullptr), imu_orientation_x_(nullptr),
+        imu_orientation_y_(nullptr), imu_orientation_z_(nullptr),
+        imu_orientation_w_(nullptr) {}
+
+  // 确保在析构时清理资源
+  ~IMUNode() {
+    // 如果LoanedStateInterface需要手动释放
+    imu_angular_velocity_x_ = nullptr;
+    imu_angular_velocity_y_ = nullptr;
+    imu_angular_velocity_z_ = nullptr;
+    imu_orientation_x_ = nullptr;
+    imu_orientation_y_ = nullptr;
+    imu_orientation_z_ = nullptr;
+    imu_orientation_w_ = nullptr;
+  }
+
+  hardware_interface::LoanedStateInterface *imu_angular_velocity_x_{};
+  hardware_interface::LoanedStateInterface *imu_angular_velocity_y_{};
+  hardware_interface::LoanedStateInterface *imu_angular_velocity_z_{};
+  hardware_interface::LoanedStateInterface *imu_orientation_x_{};
+  hardware_interface::LoanedStateInterface *imu_orientation_y_{};
+  hardware_interface::LoanedStateInterface *imu_orientation_z_{};
+  hardware_interface::LoanedStateInterface *imu_orientation_w_{};
+
+private:
+  std::string imu_name_;
+  std::string imu_frame_id_;
 };
 
 // 质心位置结构体
@@ -49,9 +83,90 @@ struct MassPos {
   double z = 0.0;
 };
 
+// 底盘跟随类
+class ChassisVel {
+public:
+  explicit ChassisVel(std::shared_ptr<rclcpp_lifecycle::LifecycleNode> node);
+
+  void update(double linear_vel[3], double angular_vel[3], double period);
+
+  class FilteredVelocity {
+  public:
+    explicit FilteredVelocity(double cutoff_frequency);
+    void update(const double velocity[3], double period);
+    double x() const noexcept { return filtered_value_[0]; }
+    double y() const noexcept { return filtered_value_[1]; }
+    double z() const noexcept { return filtered_value_[2]; }
+
+  private:
+    double cutoff_frequency_;
+    std::array<double, 3> filtered_value_{0.0, 0.0, 0.0};
+    std::array<double, 3> raw_value_{0.0, 0.0, 0.0};
+  };
+
+  std::shared_ptr<FilteredVelocity> linear_;
+  std::shared_ptr<FilteredVelocity> angular_;
+
+private:
+  double cutoff_frequency_ = 20.0;
+};
+
 // 关节控制器类
 class JointController {
 public:
+  JointController() = default;
+
+  bool init(std::shared_ptr<rclcpp_lifecycle::LifecycleNode> node,
+            const std::string &joint_prefix);
+
+  void assignCommandInterface(
+      std::vector<hardware_interface::LoanedCommandInterface> &interfaces);
+
+  void assignStateInterfaces(
+      std::vector<hardware_interface::LoanedStateInterface> &interfaces);
+
+  void releaseInterfaces();
+
+  void setCommand(double position_cmd, double velocity_cmd);
+  void update(const rclcpp::Time &time, const rclcpp::Duration &period);
+
+  double getPosition() const;
+  double getVelocity() const;
+  double getCommand() const;
+  void setEffort(double effort);
+
+  std::string joint_name_;
+  std::string parent_link_name_;
+  JointLimits joint_limits_;
+
+private:
+  // pid参数
+  double p_gain_ = 0.0;
+  double i_gain_ = 0.0;
+  double d_gain_ = 0.0;
+  double i_max_ = 0.0;
+  double i_min_ = 0.0;
+
+  // pid状态
+  double position_error_ = 0.0;
+  double position_error_last_ = 0.0;
+  double velocity_error_ = 0.0;
+  double integral_error_ = 0.0;
+
+  // 命令和状态
+  struct command {
+    double position_cmd_ = 0.0;
+    double velocity_cmd_ = 0.0;
+    double effort_cmd_ = 0.0;
+  };
+
+  // 命令实例
+  command command_{};
+
+  // 硬件接口指针
+  hardware_interface::LoanedStateInterface *position_state_ = nullptr;
+  hardware_interface::LoanedStateInterface *velocity_state_ = nullptr;
+  hardware_interface::LoanedCommandInterface *effort_command_ = nullptr;
 };
 
 // 主控制器类
@@ -77,24 +192,6 @@ public:
   state_interface_configuration() const override;
 
 protected:
-  // pid参数
-  double p_gain_ = 0.0;
-  double i_gain_ = 0.0;
-  double d_gain_ = 0.0;
-  double i_max_ = 0.0;
-  double i_min_ = 0.0;
-
-  // pid状态
-  double position_error_ = 0.0;
-  double position_error_last_ = 0.0;
-  double velocity_error_ = 0.0;
-  double integral_error_ = 0.0;
-
-  // 命令和状态
-  double position_cmd_ = {0.0};
-  double velocity_cmd_ = {0.0};
-  double effort_cmd_ = {0.0};
-
   // 关节控制器对象
   JointController yaw_controller_;
   JointController pitch_controller_;
@@ -116,6 +213,50 @@ protected:
   geometry_msgs::msg::TransformStamped odom2base_last_;
 
   std::string gimbal_frame_id_;
+
+  // IMU相关
+  bool has_imu_ = true;
+  IMUNode imu_node_;
+
+  // 前馈参数
+  MassPos mass_position_;
+  double gravity_ = 0.0;
+  bool enable_gravity_compensation_ = false;
+
+  // 摩擦补偿
+  double yaw_compensation_ = 0.0;
+  double yaw_error_tolerance_ = 0.0;
+
+  // 底盘速度补偿
+  double k_chassis_vel_ = 0.0;
+  std::shared_ptr<ChassisVel> chassis_vel_;
+
+  // 弹道求解器
+  std::shared_ptr<BulletSolver> bullet_solver_;
+
+  // 状态机
+  ControlMode state_ = RATE;
+  bool state_changed_ = true;
+
+  // 订阅器
+  rclcpp::Subscription<rm2_msgs::msg::GimbalCmd>::SharedPtr cmd_gimbal_sub_;
+  rclcpp::Subscription<rm2_msgs::msg::TrackData>::SharedPtr data_track_sub_;
+
+  // 发布器
+  rclcpp::Publisher<rm2_msgs::msg::GimbalDesError>::SharedPtr error_pub_;
+
+  // 实时缓冲区
+  realtime_tools::RealtimeBuffer<rm2_msgs::msg::GimbalCmd> cmd_rt_buffer_;
+  realtime_tools::RealtimeBuffer<rm2_msgs::msg::TrackData> track_rt_buffer_;
+
+  // 命令和跟踪数据
+  rm2_msgs::msg::GimbalCmd cmd_gimbal_;
+  rm2_msgs::msg::TrackData data_track_;
+
+  // 发布频率
+  double publish_rate_ = 100.0;
+  rclcpp::Time last_publish_time_;
+
 private:
   // 初始化方法
   void assignIMUinterfaces(
@@ -142,8 +283,8 @@ private:
   void updateChassisVelocity();
 
   // 控制指令回调函数
-  void commandCallback(const std::shared_ptr<rm2_msgs::msg::GimbalCmd> &msg);
-  void trackCallback(const std::shared_ptr<rm2_msgs::msg::TrackData> &msg);
+  void commandCallback(rm2_msgs::msg::GimbalCmd::ConstSharedPtr msg);
+  void trackCallback(rm2_msgs::msg::TrackData::ConstSharedPtr msg);
 };
 
 } // namespace rm2_gimbal_controllers
