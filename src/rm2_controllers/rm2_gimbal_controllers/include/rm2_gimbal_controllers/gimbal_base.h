@@ -1,8 +1,11 @@
 #pragma once
 
 #include "geometry_msgs/msg/transform_stamped.hpp"
+#include "rcl_interfaces/msg/set_parameters_result.hpp"
+#include "rclcpp_lifecycle/node_interfaces/lifecycle_node_interface.hpp"
 #include "rm2_gimbal_controllers/bullet_solver.h"
 #include "rm2_msgs/msg/gimbal_cmd.hpp"
+#include <atomic>
 #include <array>
 #include <control_msgs/srv/query_calibration_state.hpp>
 #include <control_toolbox/pid_ros.hpp>
@@ -15,6 +18,7 @@
 #include <limits>
 #include <memory>
 #include <rclcpp/duration.hpp>
+#include <rclcpp/parameter.hpp>
 #include <rclcpp/rclcpp.hpp>
 #include <rclcpp/time.hpp>
 #include <realtime_tools/realtime_buffer.h>
@@ -29,8 +33,22 @@
 #include <vector>
 namespace rm2_gimbal_controllers {
 
-// 控制模式枚举
-enum ControlMode { RATE = 0, TRACK, DIRECT };
+//using CallbackReturn = rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn;
+
+// 控制模式枚举（与 rm2_msgs/msg/GimbalCmd.msg 保持一致）
+enum ControlMode { RATE = 0, TRACK = 1, DIRECT = 2, TRAJ = 3 };
+
+struct GimbalConfig
+{
+  double yaw_k_v = 0.0;
+  double pitch_k_v = 0.0;
+  double chassis_compensation_a = 0.0;
+  double chassis_compensation_b = 0.0;
+  double chassis_compensation_c = 0.0;
+  double chassis_compensation_d = 0.0;
+  std::vector<double> accel_pitch{};
+  std::vector<double> accel_yaw{};
+};
 
 // 关节限位结构体
 struct JointLimits {
@@ -89,17 +107,20 @@ public:
   explicit ChassisVel(std::shared_ptr<rclcpp_lifecycle::LifecycleNode> node);
 
   void update(double linear_vel[3], double angular_vel[3], double period);
+  void setCutoffFrequency(double cutoff_frequency);
+  double cutoffFrequency() const noexcept { return cutoff_frequency_.load(); }
 
   class FilteredVelocity {
   public:
     explicit FilteredVelocity(double cutoff_frequency);
+    void setCutoffFrequency(double cutoff_frequency) noexcept;
     void update(const double velocity[3], double period);
     double x() const noexcept { return filtered_value_[0]; }
     double y() const noexcept { return filtered_value_[1]; }
     double z() const noexcept { return filtered_value_[2]; }
 
   private:
-    double cutoff_frequency_;
+    std::atomic<double> cutoff_frequency_{0.0};
     std::array<double, 3> filtered_value_{0.0, 0.0, 0.0};
     std::array<double, 3> raw_value_{0.0, 0.0, 0.0};
   };
@@ -108,7 +129,13 @@ public:
   std::shared_ptr<FilteredVelocity> angular_;
 
 private:
-  double cutoff_frequency_ = 20.0;
+  rcl_interfaces::msg::SetParametersResult
+  paramCallback(const std::vector<rclcpp::Parameter> &parameters);
+
+  std::shared_ptr<rclcpp_lifecycle::LifecycleNode> node_;
+  std::atomic<double> cutoff_frequency_{20.0};
+  rclcpp::node_interfaces::OnSetParametersCallbackHandle::SharedPtr
+      param_cb_handle_;
 };
 
 // 关节控制器类
@@ -170,10 +197,10 @@ private:
 };
 
 // 主控制器类
-class GimbalController : public controller_interface::ControllerInterface {
+class GimbalControllerBase : public controller_interface::ControllerInterface {
 public:
-  GimbalController() = default;
-  ~GimbalController() override = default;
+  GimbalControllerBase() = default;
+  ~GimbalControllerBase() override = default;
   // 生命周期回调函数
   controller_interface::CallbackReturn on_init() override;
   controller_interface::CallbackReturn
@@ -208,9 +235,11 @@ protected:
 
   // 坐标变换
   geometry_msgs::msg::TransformStamped odom2gimbal_des_;
+  geometry_msgs::msg::TransformStamped odom2gimbal_traject_des_;
   geometry_msgs::msg::TransformStamped odom2pitch_;
   geometry_msgs::msg::TransformStamped odom2base_;
   geometry_msgs::msg::TransformStamped odom2base_last_;
+  bool has_odom2base_last_ = false;
 
   std::string gimbal_frame_id_;
 
@@ -257,7 +286,32 @@ protected:
   double publish_rate_ = 100.0;
   rclcpp::Time last_publish_time_;
 
+  // 动态配置（对齐 ROS1 的 dynamic_reconfigure + RT buffer）
+  GimbalConfig config_{};
+  realtime_tools::RealtimeBuffer<GimbalConfig> config_rt_buffer_;
+
+  // 底盘补偿
+  double chassis_compensation_ = 0.0;
+
+  // 速度指令（用于 k_v 前馈）
+  double yaw_vel_des_ = 0.0;
+  double pitch_vel_des_ = 0.0;
+
+  // RATE 模式启动对齐
+  bool start_ = true;
+
+  double yaw_des_ = 0.0;
+  double pitch_des_ = 0.0;
+
+  // 动态调参
+
 private:
+  rcl_interfaces::msg::SetParametersResult
+  paramCallback(const std::vector<rclcpp::Parameter> &parameters);
+
+  rclcpp::node_interfaces::OnSetParametersCallbackHandle::SharedPtr
+      param_cb_handle_;
+
   // 初始化方法
   void assignIMUinterfaces(
       std::vector<hardware_interface::LoanedStateInterface> &interfaces);
@@ -266,12 +320,11 @@ private:
   void rate(const rclcpp::Time &time, const rclcpp::Duration &period);
   void track(const rclcpp::Time &time);
   void direct(const rclcpp::Time &time);
+  void traj(const rclcpp::Time &time);
 
   void setDes(const rclcpp::Time &time, const double yaw, const double pitch);
   // 限位检查
-  void setDesIntoLimit(double &des_yaw, double &des_pitch,
-                       double base2gimbal_current_des,
-                       const JointLimits &joint_limits);
+  bool setDesIntoLimit(double &des, const JointLimits &joint_limits);
 
   // 关节运动控制
   void movejoint(const rclcpp::Time &time, const rclcpp::Duration &period);
@@ -281,6 +334,9 @@ private:
 
   // 更新底盘速度
   void updateChassisVelocity();
+
+  double updateCompensation(double chassis_vel_angular_z);
+  double feedForwardPitch(const rclcpp::Time &time);
 
   // 控制指令回调函数
   void commandCallback(rm2_msgs::msg::GimbalCmd::ConstSharedPtr msg);

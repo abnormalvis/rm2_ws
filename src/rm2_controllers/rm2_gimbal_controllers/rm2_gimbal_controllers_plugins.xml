@@ -1,6 +1,6 @@
-<library path="rm2_calibration_controllers">
-    <class name="rm2_gimbal_controller/GimbalController"
-           type="rm2_gimbal_controller::GimbalController"
+<library path="rm2_gimbal_controllers">
+    <class name="rm2_gimbal_controllers/GimbalController"
+           type="rm2_gimbal_controllers::GimbalController"
            base_class_type="controller_interface::ControllerInterface">
         <description>
             The Controller is RoboMaster robot Gimbal controller. It expects a EffortJointInterface type of hardware interface.

@@ -9,6 +9,7 @@ endif()
 find_package(ament_cmake REQUIRED)
 find_package(rm2_common REQUIRED)
 find_package(rclcpp REQUIRED)
+find_package(rcl_interfaces REQUIRED)
 find_package(pid_controller REQUIRED)
 find_package(controller_interface REQUIRED)
 find_package(hardware_interface REQUIRED)
@@ -20,12 +21,10 @@ find_package(visualization_msgs REQUIRED)
 find_package(angles REQUIRED)
 find_package(tf2_geometry_msgs REQUIRED)
 
-# 可选依赖：如果找不到就跳过
-find_package(rqt_reconfigure QUIET)
-
 set(DEPENDENCIES
     rclcpp
     rm2_common
+    rcl_interfaces
     pid_controller
     controller_interface
     hardware_interface
@@ -38,18 +37,10 @@ set(DEPENDENCIES
     tf2_geometry_msgs
 )
 
-# 如果找到了 rqt_reconfigure，添加到依赖
-if(rqt_reconfigure_FOUND)
-  list(APPEND DEPENDENCIES rqt_reconfigure)
-  add_definitions(-DHAVE_RQT_RECONFIGURE)
-  message(STATUS "rqt_reconfigure found - GUI support enabled")
-else()
-  message(WARNING "rqt_reconfigure not found - GUI support disabled")
-endif()
-
 add_library(${PROJECT_NAME} SHARED
   src/gimbal_base.cpp
   src/bullet_solver.cpp
+  src/gimbal_controller.cpp
 )
 
 target_include_directories(${PROJECT_NAME} PUBLIC
