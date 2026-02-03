@@ -1,0 +1,9 @@
+<library path="robot_state_controller">
+  <class name="robot_state_controller/RobotStateController"
+         type="robot_state_controller::RobotStateController"
+         base_class_type="controller_interface::ControllerInterface">
+    <description>
+      The robot state controller publishes the robot state to tf from joint states and the robot description.
+    </description>
+  </class>
+</library>
