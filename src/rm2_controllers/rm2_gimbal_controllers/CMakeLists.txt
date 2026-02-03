@@ -7,7 +7,6 @@ endif()
 
 # find dependencies
 find_package(ament_cmake REQUIRED)
-find_package(rm2_common REQUIRED)
 find_package(rclcpp REQUIRED)
 find_package(rcl_interfaces REQUIRED)
 find_package(pid_controller REQUIRED)
@@ -20,10 +19,15 @@ find_package(tf2_eigen REQUIRED)
 find_package(visualization_msgs REQUIRED)
 find_package(angles REQUIRED)
 find_package(tf2_geometry_msgs REQUIRED)
+find_package(tf2_ros REQUIRED)
+find_package(realtime_tools REQUIRED)
+find_package(rm2_msgs REQUIRED)
+find_package(control_msgs REQUIRED)
+find_package(geometry_msgs REQUIRED)
+find_package(pal_statistics REQUIRED)
 
 set(DEPENDENCIES
     rclcpp
-    rm2_common
     rcl_interfaces
     pid_controller
     controller_interface
@@ -35,6 +39,12 @@ set(DEPENDENCIES
     visualization_msgs
     angles
     tf2_geometry_msgs
+    tf2_ros
+    realtime_tools
+    rm2_msgs
+    control_msgs
+    geometry_msgs
+    pal_statistics
 )
 
 add_library(${PROJECT_NAME} SHARED
