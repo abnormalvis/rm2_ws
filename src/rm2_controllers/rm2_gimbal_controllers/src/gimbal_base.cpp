@@ -187,7 +187,6 @@ void JointController::setEffort(double effort) {
   }
 }
 
-
 // ChassisVel 实现
 ChassisVel::FilteredVelocity::FilteredVelocity(double cutoff_frequency)
     : cutoff_frequency_(cutoff_frequency) {}
@@ -198,7 +197,7 @@ void ChassisVel::FilteredVelocity::setCutoffFrequency(
 }
 
 void ChassisVel::FilteredVelocity::update(const double velocity[3],
-                                         double period) {
+                                          double period) {
   raw_value_[0] = velocity[0];
   raw_value_[1] = velocity[1];
   raw_value_[2] = velocity[2];
@@ -295,10 +294,9 @@ void ChassisVel::update(double linear_vel[3], double angular_vel[3],
   angular_->update(angular_vel, period);
 }
 
-
 // GimbalControllerBase 实现
 void GimbalControllerBase::setDes(const rclcpp::Time &time, const double yaw,
-                              const double pitch) {
+                                  const double pitch) {
   tf2::Quaternion q_odom2gimbal_des;
   q_odom2gimbal_des.setRPY(0.0, pitch, yaw);
 
@@ -319,7 +317,8 @@ void GimbalControllerBase::setDes(const rclcpp::Time &time, const double yaw,
   q_base2gimbal_limited.setRPY(roll_b2g, pitch_b2g, yaw_b2g);
 
   // 写回 TF（odom->gimbal_des）
-  odom2gimbal_des_.transform.rotation = tf2::toMsg(q_odom2base * q_base2gimbal_limited);
+  odom2gimbal_des_.transform.rotation =
+      tf2::toMsg(q_odom2base * q_base2gimbal_limited);
   odom2gimbal_des_.header.stamp = time;
   if (tf_broadcaster_) {
     tf_broadcaster_->sendTransform(odom2gimbal_des_);
@@ -331,7 +330,7 @@ void GimbalControllerBase::setDes(const rclcpp::Time &time, const double yaw,
 }
 
 bool GimbalControllerBase::setDesIntoLimit(double &des,
-                                          const JointLimits &joint_limits) {
+                                           const JointLimits &joint_limits) {
   if (!joint_limits.has_position_limits) {
     return true;
   }
@@ -353,7 +352,7 @@ bool GimbalControllerBase::setDesIntoLimit(double &des,
 }
 
 void GimbalControllerBase::movejoint(const rclcpp::Time &time,
-                                 const rclcpp::Duration &period) {
+                                     const rclcpp::Duration &period) {
   yaw_controller_.update(time, period);
   pitch_controller_.update(time, period);
 
@@ -361,15 +360,16 @@ void GimbalControllerBase::movejoint(const rclcpp::Time &time,
   double angular_vel_z = 0.0;
   if (has_imu_ && imu_node_.imu_angular_velocity_y_ &&
       imu_node_.imu_angular_velocity_z_) {
-    angular_vel_y = imu_node_.imu_angular_velocity_y_->get_optional().value_or(0.0);
-    angular_vel_z = imu_node_.imu_angular_velocity_z_->get_optional().value_or(0.0);
+    angular_vel_y =
+        imu_node_.imu_angular_velocity_y_->get_optional().value_or(0.0);
+    angular_vel_z =
+        imu_node_.imu_angular_velocity_z_->get_optional().value_or(0.0);
   } else {
     angular_vel_y = pitch_controller_.getVelocity();
     angular_vel_z = yaw_controller_.getVelocity();
   }
 
-  const double chassis_ang_z =
-      chassis_vel_ ? chassis_vel_->angular_->z() : 0.0;
+  const double chassis_ang_z = chassis_vel_ ? chassis_vel_->angular_->z() : 0.0;
   const double comp = updateCompensation(chassis_ang_z);
 
   const double pitch_ff = feedForwardPitch(time);
@@ -385,12 +385,11 @@ void GimbalControllerBase::movejoint(const rclcpp::Time &time,
   yaw_controller_.setEffort(yaw_controller_.getCommand() + yaw_extra);
 }
 
-void GimbalControllerBase::feedforwardCompensation(const rclcpp::Time & /*time*/) {
+void GimbalControllerBase::feedforwardCompensation(
+    const rclcpp::Time & /*time*/) {
   if (!enable_gravity_compensation_)
     return;
   // 重力补偿实现
-
-  
 }
 
 void GimbalControllerBase::updateChassisVelocity() {
@@ -403,25 +402,23 @@ void GimbalControllerBase::updateChassisVelocity() {
     return;
   }
 
-  const double tf_period =
-      (rclcpp::Time(odom2base_.header.stamp) - rclcpp::Time(odom2base_last_.header.stamp)).seconds();
+  const double tf_period = (rclcpp::Time(odom2base_.header.stamp) -
+                            rclcpp::Time(odom2base_last_.header.stamp))
+                               .seconds();
   if (!(tf_period > 0.0) || !std::isfinite(tf_period)) {
     odom2base_last_ = odom2base_;
     return;
   }
 
-  const double linear_x =
-      (odom2base_.transform.translation.x -
-       odom2base_last_.transform.translation.x) /
-      tf_period;
-  const double linear_y =
-      (odom2base_.transform.translation.y -
-       odom2base_last_.transform.translation.y) /
-      tf_period;
-  const double linear_z =
-      (odom2base_.transform.translation.z -
-       odom2base_last_.transform.translation.z) /
-      tf_period;
+  const double linear_x = (odom2base_.transform.translation.x -
+                           odom2base_last_.transform.translation.x) /
+                          tf_period;
+  const double linear_y = (odom2base_.transform.translation.y -
+                           odom2base_last_.transform.translation.y) /
+                          tf_period;
+  const double linear_z = (odom2base_.transform.translation.z -
+                           odom2base_last_.transform.translation.z) /
+                          tf_period;
 
   double last_r = 0.0, last_p = 0.0, last_y = 0.0;
   double r = 0.0, p = 0.0, y = 0.0;
@@ -436,9 +433,12 @@ void GimbalControllerBase::updateChassisVelocity() {
     tf2::Matrix3x3(q).getRPY(last_r, last_p, last_y);
   }
 
-  const double angular_x = angles::shortest_angular_distance(last_r, r) / tf_period;
-  const double angular_y = angles::shortest_angular_distance(last_p, p) / tf_period;
-  const double angular_z = angles::shortest_angular_distance(last_y, y) / tf_period;
+  const double angular_x =
+      angles::shortest_angular_distance(last_r, r) / tf_period;
+  const double angular_y =
+      angles::shortest_angular_distance(last_p, p) / tf_period;
+  const double angular_z =
+      angles::shortest_angular_distance(last_y, y) / tf_period;
 
   double linear_vel[3]{linear_x, linear_y, linear_z};
   double angular_vel[3]{angular_x, angular_y, angular_z};
@@ -480,7 +480,7 @@ double GimbalControllerBase::feedForwardPitch(const rclcpp::Time &time) {
     const double mz = mass_position_.z;
 
     const double gx = gravity_pitch.vector.x;
-    const double gy = gravity_pitch.vector.y;
+    // const double gy = gravity_pitch.vector.y;  // Unused
     const double gz = gravity_pitch.vector.z;
 
     const double cy = (mz * gx) - (mx * gz);
@@ -504,7 +504,7 @@ void GimbalControllerBase::trackCallback(
 }
 
 void GimbalControllerBase::rate(const rclcpp::Time &time,
-                            const rclcpp::Duration &period) {
+                                const rclcpp::Duration &period) {
   if (state_changed_) {
     state_changed_ = false;
     RCLCPP_INFO(get_node()->get_logger(), "Switched to RATE mode");
@@ -570,8 +570,7 @@ void GimbalControllerBase::track(const rclcpp::Time &time) {
                          2000, "Track TF failed: %s", ex.what());
   }
 
-  const double dt =
-      (time - rclcpp::Time(data_track_.header.stamp)).seconds();
+  const double dt = (time - rclcpp::Time(data_track_.header.stamp)).seconds();
 
   // 时间补偿（对齐 reference.c）
   target_pos.x += target_vel.x * dt - odom2pitch_.transform.translation.x;
@@ -587,24 +586,22 @@ void GimbalControllerBase::track(const rclcpp::Time &time) {
 
   bool solve_success = false;
   if (bullet_solver_) {
-    solve_success = bullet_solver_->solve(target_pos, target_vel,
-                                          cmd_gimbal_.bullet_speed);
+    solve_success =
+        bullet_solver_->solve(target_pos, target_vel, cmd_gimbal_.bullet_speed);
   }
 
   // publish error + bullet model
   if (publish_rate_ > 0.0 &&
       (last_publish_time_ +
-           rclcpp::Duration::from_seconds(1.0 / publish_rate_)) <
-          time) {
+       rclcpp::Duration::from_seconds(1.0 / publish_rate_)) < time) {
     if (error_pub_) {
       rm2_msgs::msg::GimbalDesError msg;
       msg.stamp = time;
-      const double err =
-          (bullet_solver_)
-              ? bullet_solver_->getGimbalError(target_pos, target_vel,
-                                               yaw_compute, pitch_compute,
-                                               cmd_gimbal_.bullet_speed)
-              : 0.0;
+      const double err = (bullet_solver_)
+                             ? bullet_solver_->getGimbalError(
+                                   target_pos, target_vel, yaw_compute,
+                                   pitch_compute, cmd_gimbal_.bullet_speed)
+                             : 0.0;
       msg.error = solve_success ? err : 1.0;
       error_pub_->publish(msg);
     }
@@ -646,12 +643,9 @@ void GimbalControllerBase::direct(const rclcpp::Time &time) {
                          2000, "Direct TF failed: %s", ex.what());
   }
 
-  const double dx =
-      aim_point_odom.x - odom2pitch_.transform.translation.x;
-  const double dy =
-      aim_point_odom.y - odom2pitch_.transform.translation.y;
-  const double dz =
-      aim_point_odom.z - odom2pitch_.transform.translation.z;
+  const double dx = aim_point_odom.x - odom2pitch_.transform.translation.x;
+  const double dy = aim_point_odom.y - odom2pitch_.transform.translation.y;
+  const double dz = aim_point_odom.z - odom2pitch_.transform.translation.z;
 
   yaw_vel_des_ = 0.0;
   pitch_vel_des_ = 0.0;
@@ -675,9 +669,8 @@ void GimbalControllerBase::traj(const rclcpp::Time &time) {
 
   try {
     if (!cmd_gimbal_.traj_frame_id.empty()) {
-      const auto odom2traj =
-          tf_buffer_->lookupTransform("odom", cmd_gimbal_.traj_frame_id,
-                                      tf2::TimePointZero);
+      const auto odom2traj = tf_buffer_->lookupTransform(
+          "odom", cmd_gimbal_.traj_frame_id, tf2::TimePointZero);
       tf2::Quaternion q;
       tf2::fromMsg(odom2traj.transform.rotation, q);
       tf2::Matrix3x3(q).getRPY(roll, pitch, yaw);
@@ -869,9 +862,8 @@ controller_interface::CallbackReturn GimbalControllerBase::on_configure(
 
   // 控制器参数动态更新回调
   if (!param_cb_handle_) {
-    param_cb_handle_ = get_node()->add_on_set_parameters_callback(
-        std::bind(&GimbalControllerBase::paramCallback, this,
-                  std::placeholders::_1));
+    param_cb_handle_ = get_node()->add_on_set_parameters_callback(std::bind(
+        &GimbalControllerBase::paramCallback, this, std::placeholders::_1));
   }
 
   if (!yaw_controller_.init(get_node(), "yaw") ||
@@ -892,7 +884,8 @@ controller_interface::CallbackReturn GimbalControllerBase::on_configure(
 
   data_track_sub_ = get_node()->create_subscription<rm2_msgs::msg::TrackData>(
       "/track", rclcpp::QoS(10),
-      std::bind(&GimbalControllerBase::trackCallback, this, std::placeholders::_1));
+      std::bind(&GimbalControllerBase::trackCallback, this,
+                std::placeholders::_1));
 
   error_pub_ = get_node()->create_publisher<rm2_msgs::msg::GimbalDesError>(
       "~/error", rclcpp::QoS(10));
@@ -921,26 +914,26 @@ controller_interface::CallbackReturn GimbalControllerBase::on_configure(
   data_track_.id = 0;
   track_rt_buffer_.writeFromNonRT(data_track_);
 
-    // 初始化动态配置（对齐 reference.c 的 config_rt_buffer_）
-    config_.yaw_k_v = get_node()->get_parameter("yaw_k_v").as_double();
-    config_.pitch_k_v = get_node()->get_parameter("pitch_k_v").as_double();
-    config_.chassis_compensation_a =
+  // 初始化动态配置（对齐 reference.c 的 config_rt_buffer_）
+  config_.yaw_k_v = get_node()->get_parameter("yaw_k_v").as_double();
+  config_.pitch_k_v = get_node()->get_parameter("pitch_k_v").as_double();
+  config_.chassis_compensation_a =
       get_node()->get_parameter("chassis_compensation.a").as_double();
-    config_.chassis_compensation_b =
+  config_.chassis_compensation_b =
       get_node()->get_parameter("chassis_compensation.b").as_double();
-    config_.chassis_compensation_c =
+  config_.chassis_compensation_c =
       get_node()->get_parameter("chassis_compensation.c").as_double();
-    config_.chassis_compensation_d =
+  config_.chassis_compensation_d =
       get_node()->get_parameter("chassis_compensation.d").as_double();
-    config_.accel_pitch =
+  config_.accel_pitch =
       get_node()->get_parameter("accel_pitch").as_double_array();
-    config_.accel_yaw = get_node()->get_parameter("accel_yaw").as_double_array();
-    config_rt_buffer_.writeFromNonRT(config_);
+  config_.accel_yaw = get_node()->get_parameter("accel_yaw").as_double_array();
+  config_rt_buffer_.writeFromNonRT(config_);
 
-    yaw_des_ = 0.0;
-    pitch_des_ = 0.0;
-    start_ = true;
-    has_odom2base_last_ = false;
+  yaw_des_ = 0.0;
+  pitch_des_ = 0.0;
+  start_ = true;
+  has_odom2base_last_ = false;
 
   RCLCPP_INFO(get_node()->get_logger(),
               "Gimbal controller configured successfully");
@@ -948,8 +941,8 @@ controller_interface::CallbackReturn GimbalControllerBase::on_configure(
   return controller_interface::CallbackReturn::SUCCESS;
 }
 
-rcl_interfaces::msg::SetParametersResult
-GimbalControllerBase::paramCallback(const std::vector<rclcpp::Parameter> &parameters) {
+rcl_interfaces::msg::SetParametersResult GimbalControllerBase::paramCallback(
+    const std::vector<rclcpp::Parameter> &parameters) {
   rcl_interfaces::msg::SetParametersResult result;
   result.successful = true;
 
@@ -983,9 +976,10 @@ GimbalControllerBase::paramCallback(const std::vector<rclcpp::Parameter> &parame
         result.reason = "yaw_k_v must be a number";
         return result;
       }
-      cfg.yaw_k_v = (param.get_type() == rclcpp::ParameterType::PARAMETER_DOUBLE)
-                        ? param.as_double()
-                        : static_cast<double>(param.as_int());
+      cfg.yaw_k_v =
+          (param.get_type() == rclcpp::ParameterType::PARAMETER_DOUBLE)
+              ? param.as_double()
+              : static_cast<double>(param.as_int());
       cfg_changed = true;
     } else if (name == "pitch_k_v") {
       if (param.get_type() != rclcpp::ParameterType::PARAMETER_DOUBLE &&
@@ -994,21 +988,25 @@ GimbalControllerBase::paramCallback(const std::vector<rclcpp::Parameter> &parame
         result.reason = "pitch_k_v must be a number";
         return result;
       }
-      cfg.pitch_k_v = (param.get_type() == rclcpp::ParameterType::PARAMETER_DOUBLE)
-                          ? param.as_double()
-                          : static_cast<double>(param.as_int());
+      cfg.pitch_k_v =
+          (param.get_type() == rclcpp::ParameterType::PARAMETER_DOUBLE)
+              ? param.as_double()
+              : static_cast<double>(param.as_int());
       cfg_changed = true;
-    } else if (name == "chassis_compensation.a" || name == "chassis_compensation.b" ||
-               name == "chassis_compensation.c" || name == "chassis_compensation.d") {
+    } else if (name == "chassis_compensation.a" ||
+               name == "chassis_compensation.b" ||
+               name == "chassis_compensation.c" ||
+               name == "chassis_compensation.d") {
       if (param.get_type() != rclcpp::ParameterType::PARAMETER_DOUBLE &&
           param.get_type() != rclcpp::ParameterType::PARAMETER_INTEGER) {
         result.successful = false;
         result.reason = "chassis_compensation.* must be a number";
         return result;
       }
-      const double v = (param.get_type() == rclcpp::ParameterType::PARAMETER_DOUBLE)
-                           ? param.as_double()
-                           : static_cast<double>(param.as_int());
+      const double v =
+          (param.get_type() == rclcpp::ParameterType::PARAMETER_DOUBLE)
+              ? param.as_double()
+              : static_cast<double>(param.as_int());
       if (name == "chassis_compensation.a") {
         cfg.chassis_compensation_a = v;
       } else if (name == "chassis_compensation.b") {
@@ -1042,14 +1040,16 @@ GimbalControllerBase::paramCallback(const std::vector<rclcpp::Parameter> &parame
         result.reason = "yaw.k_chassis_vel must be a number";
         return result;
       }
-      k_chassis_vel_ = (param.get_type() == rclcpp::ParameterType::PARAMETER_DOUBLE)
-                           ? param.as_double()
-                           : static_cast<double>(param.as_int());
+      k_chassis_vel_ =
+          (param.get_type() == rclcpp::ParameterType::PARAMETER_DOUBLE)
+              ? param.as_double()
+              : static_cast<double>(param.as_int());
     } else if (name == "yaw.resistance_compensation.resistance") {
       if (param.get_type() != rclcpp::ParameterType::PARAMETER_DOUBLE &&
           param.get_type() != rclcpp::ParameterType::PARAMETER_INTEGER) {
         result.successful = false;
-        result.reason = "yaw.resistance_compensation.resistance must be a number";
+        result.reason =
+            "yaw.resistance_compensation.resistance must be a number";
         return result;
       }
       yaw_compensation_ =
@@ -1113,7 +1113,7 @@ controller_interface::CallbackReturn GimbalControllerBase::on_deactivate(
 
 controller_interface::return_type
 GimbalControllerBase::update(const rclcpp::Time &time,
-                         const rclcpp::Duration &period) {
+                             const rclcpp::Duration &period) {
   // 从实时缓冲区读取最新的云台命令
   cmd_gimbal_ = *cmd_rt_buffer_.readFromRT();
   // 从非RT缓冲区读取跟踪目标数据
@@ -1122,10 +1122,10 @@ GimbalControllerBase::update(const rclcpp::Time &time,
   config_ = *config_rt_buffer_.readFromRT();
 
   try {
-    odom2pitch_ =
-        tf_buffer_->lookupTransform("odom", odom2pitch_.child_frame_id, tf2::TimePointZero);
-    odom2base_ =
-        tf_buffer_->lookupTransform("odom", odom2base_.child_frame_id, tf2::TimePointZero);
+    odom2pitch_ = tf_buffer_->lookupTransform(
+        "odom", odom2pitch_.child_frame_id, tf2::TimePointZero);
+    odom2base_ = tf_buffer_->lookupTransform("odom", odom2base_.child_frame_id,
+                                             tf2::TimePointZero);
   } catch (const tf2::TransformException &ex) {
     RCLCPP_WARN_THROTTLE(get_node()->get_logger(), *get_node()->get_clock(),
                          2000, "Could not get transform: %s", ex.what());
@@ -1147,7 +1147,7 @@ GimbalControllerBase::update(const rclcpp::Time &time,
     rate(time, period); // 根据角速度控制云台旋转
     break;
   case TRACK:
-    track(time);  // 跟踪运动目标
+    track(time); // 跟踪运动目标
     break;
   case DIRECT:
     direct(time); // 直接指向空间某点
