@@ -47,6 +47,8 @@ public:
   double getPosition() const;
   double getVelocity() const;
   double getCommand() const;
+  double getPositionCommand() const;
+  double getVelocityCommand() const;
   void setEffort(double effort);
 
   std::string joint_name_;
