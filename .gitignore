@@ -3,10 +3,15 @@ install/
 log/
 .cache/
 .vscode/
+
 *.md
 !README.md
+.clangd
+
 # Exclude reference repositories
 src/rm_controllers/
 src/ros2_control/
 src/rm2_ecat/
+src/rm2_ecat/rm2_ecat_ros/
 src/rm2_control/rm2_hw/
+src/rm_config/

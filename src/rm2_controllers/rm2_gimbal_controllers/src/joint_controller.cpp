@@ -219,6 +219,14 @@ double JointController::getOuterLoopVelocityReference() const {
 
 double JointController::getCommand() const { return command_.effort_cmd_; }
 
+double JointController::getPositionCommand() const {
+  return command_.position_cmd_;
+}
+
+double JointController::getVelocityCommand() const {
+  return command_.velocity_cmd_;
+}
+
 void JointController::setEffort(double effort) {
   command_.effort_cmd_ = effort;
   if (effort_command_ != nullptr) {

@@ -138,13 +138,20 @@ void GimbalControllerBase::setDes(const rclcpp::Time &time, const double yaw,
   double yaw_b2g = 0.0;
   tf2::Matrix3x3(q_base2gimbal_des).getRPY(roll_b2g, pitch_b2g, yaw_b2g);
 
-  (void)setDesIntoLimit(yaw_b2g, yaw_controller_.joint_limits_);
-  (void)setDesIntoLimit(pitch_b2g, pitch_controller_.joint_limits_);
+  setJointDes(time, yaw_b2g, pitch_b2g);
+}
+
+void GimbalControllerBase::setJointDes(const rclcpp::Time &time, double yaw,
+                                       double pitch) {
+  tf2::Quaternion q_odom2base;
+  tf2::fromMsg(odom2base_.transform.rotation, q_odom2base);
+
+  (void)setDesIntoLimit(yaw, yaw_controller_.joint_limits_);
+  (void)setDesIntoLimit(pitch, pitch_controller_.joint_limits_);
 
   tf2::Quaternion q_base2gimbal_limited;
-  q_base2gimbal_limited.setRPY(roll_b2g, pitch_b2g, yaw_b2g);
+  q_base2gimbal_limited.setRPY(0.0, pitch, yaw);
 
-  // 写回 TF（odom->gimbal_des）
   odom2gimbal_des_.transform.rotation =
       tf2::toMsg(q_odom2base * q_base2gimbal_limited);
   odom2gimbal_des_.header.stamp = time;
@@ -152,9 +159,8 @@ void GimbalControllerBase::setDes(const rclcpp::Time &time, const double yaw,
     tf_broadcaster_->sendTransform(odom2gimbal_des_);
   }
 
-  // 更新关节 position 指令（base2gimbal 的 yaw/pitch 就是两关节的目标角）
-  yaw_controller_.setCommand(yaw_b2g, yaw_vel_des_);
-  pitch_controller_.setCommand(pitch_b2g, pitch_vel_des_);
+  yaw_controller_.setCommand(yaw, yaw_vel_des_);
+  pitch_controller_.setCommand(pitch, pitch_vel_des_);
 }
 
 bool GimbalControllerBase::setDesIntoLimit(double &des,
@@ -320,6 +326,7 @@ double GimbalControllerBase::feedForwardPitch(const rclcpp::Time &time) {
 
 void GimbalControllerBase::commandCallback(
     rm2_msgs::msg::GimbalCmd::ConstSharedPtr msg) {
+  target_angle_mode_active_.store(false);
   cmd_rt_buffer_.writeFromNonRT(*msg);
 }
 
@@ -329,6 +336,12 @@ void GimbalControllerBase::trackCallback(
     return;
   }
   track_rt_buffer_.writeFromNonRT(*msg);
+}
+
+void GimbalControllerBase::targetAngleCallback(
+    geometry_msgs::msg::Vector3Stamped::ConstSharedPtr msg) {
+  target_angle_rt_buffer_.writeFromNonRT(*msg);
+  target_angle_mode_active_.store(true);
 }
 
 void GimbalControllerBase::rate(const rclcpp::Time &time,
@@ -515,6 +528,13 @@ void GimbalControllerBase::traj(const rclcpp::Time &time) {
   yaw_des_ = yaw;
   pitch_des_ = pitch;
   setDes(time, yaw_des_, pitch_des_);
+}
+
+void GimbalControllerBase::targetAngle(const rclcpp::Time &time) {
+  const auto target_angle = *target_angle_rt_buffer_.readFromRT();
+  yaw_vel_des_ = 0.0;
+  pitch_vel_des_ = 0.0;
+  setJointDes(time, target_angle.vector.x, target_angle.vector.y);
 }
 
 void GimbalControllerBase::assignIMUinterfaces(
@@ -728,6 +748,12 @@ controller_interface::CallbackReturn GimbalControllerBase::on_configure(
       std::bind(&GimbalControllerBase::commandCallback, this,
                 std::placeholders::_1));
 
+    target_angle_sub_ =
+      get_node()->create_subscription<geometry_msgs::msg::Vector3Stamped>(
+        "~/command/target_angle", rclcpp::QoS(10),
+        std::bind(&GimbalControllerBase::targetAngleCallback, this,
+            std::placeholders::_1));
+
   data_track_sub_ = get_node()->create_subscription<rm2_msgs::msg::TrackData>(
       "/track", rclcpp::QoS(10),
       std::bind(&GimbalControllerBase::trackCallback, this,
@@ -761,6 +787,12 @@ controller_interface::CallbackReturn GimbalControllerBase::on_configure(
 
   data_track_.id = 0;
   track_rt_buffer_.writeFromNonRT(data_track_);
+
+  target_angle_cmd_.header.frame_id = "base_link";
+  target_angle_cmd_.vector.x = 0.0;
+  target_angle_cmd_.vector.y = 0.0;
+  target_angle_cmd_.vector.z = 0.0;
+  target_angle_rt_buffer_.writeFromNonRT(target_angle_cmd_);
 
   // 初始化动态配置（对齐 reference.c 的 config_rt_buffer_）
   config_.yaw_k_v = get_node()->get_parameter("yaw_k_v").as_double();
@@ -993,30 +1025,45 @@ GimbalControllerBase::update(const rclcpp::Time &time,
   updateChassisVelocity();
 
   // 更新控制状态
-  if (state_ != static_cast<ControlMode>(cmd_gimbal_.mode)) {
+  const bool target_angle_mode_active = target_angle_mode_active_.load();
+  if (target_angle_mode_active != target_angle_mode_last_active_) {
+    yaw_controller_.reset();
+    pitch_controller_.reset();
+    target_angle_mode_last_active_ = target_angle_mode_active;
+    if (target_angle_mode_active) {
+      RCLCPP_INFO(get_node()->get_logger(),
+                  "Switched to TARGET_ANGLE command mode");
+    }
+  }
+
+  if (!target_angle_mode_active &&
+      state_ != static_cast<ControlMode>(cmd_gimbal_.mode)) {
     state_ = static_cast<ControlMode>(cmd_gimbal_.mode);
     state_changed_ = true;
     yaw_controller_.reset();
     pitch_controller_.reset();
   }
 
-  // 状态机执行
-  switch (state_) {
-  case RATE:
-    rate(time, period); // 根据角速度控制云台旋转
-    break;
-  case TRACK:
-    track(time); // 跟踪运动目标
-    break;
-  case DIRECT:
-    direct(time); // 直接指向空间某点
-    break;
-  case TRAJ:
-    traj(time);
-    break;
-  default:
-    RCLCPP_WARN(get_node()->get_logger(), "Unknown control mode: %d", state_);
-    break;
+  if (target_angle_mode_active) {
+    targetAngle(time);
+  } else {
+    switch (state_) {
+    case RATE:
+      rate(time, period);
+      break;
+    case TRACK:
+      track(time);
+      break;
+    case DIRECT:
+      direct(time);
+      break;
+    case TRAJ:
+      traj(time);
+      break;
+    default:
+      RCLCPP_WARN(get_node()->get_logger(), "Unknown control mode: %d", state_);
+      break;
+    }
   }
 
   // 移动关节
@@ -1031,6 +1078,17 @@ GimbalControllerBase::update(const rclcpp::Time &time,
         pitch_controller_.getPositionError(),
         pitch_controller_.getOuterLoopVelocityReference(),
         pitch_controller_.getInnerLoopVelocityError());
+
+      // 发布目标角度调试量：x=outer-loop target(rad), y=current(rad), z=feedforward velocity(rad/s)
+      pid_debug_publisher_->publish("~/debug/yaw_target", gimbal_frame_id_, time,
+                      yaw_controller_.getPositionCommand(),
+                      yaw_controller_.getPosition(),
+                      yaw_controller_.getVelocityCommand());
+      pid_debug_publisher_->publish("~/debug/pitch_target", gimbal_frame_id_,
+                      time,
+                      pitch_controller_.getPositionCommand(),
+                      pitch_controller_.getPosition(),
+                      pitch_controller_.getVelocityCommand());
   }
 
   return controller_interface::return_type::OK;

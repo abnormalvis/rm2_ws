@@ -1,6 +1,7 @@
 #pragma once
 
 #include "geometry_msgs/msg/transform_stamped.hpp"
+#include "geometry_msgs/msg/vector3_stamped.hpp"
 #include "rcl_interfaces/msg/set_parameters_result.hpp"
 #include "rm2_gimbal_controllers/bullet_solver.h"
 #include "rm2_gimbal_controllers/joint_controller.h"
@@ -197,6 +198,8 @@ protected:
   // 订阅器
   rclcpp::Subscription<rm2_msgs::msg::GimbalCmd>::SharedPtr cmd_gimbal_sub_;
   rclcpp::Subscription<rm2_msgs::msg::TrackData>::SharedPtr data_track_sub_;
+  rclcpp::Subscription<geometry_msgs::msg::Vector3Stamped>::SharedPtr
+      target_angle_sub_;
 
   // 发布器
   rclcpp::Publisher<rm2_msgs::msg::GimbalDesError>::SharedPtr error_pub_;
@@ -205,10 +208,13 @@ protected:
   // 实时缓冲区
   realtime_tools::RealtimeBuffer<rm2_msgs::msg::GimbalCmd> cmd_rt_buffer_;
   realtime_tools::RealtimeBuffer<rm2_msgs::msg::TrackData> track_rt_buffer_;
+  realtime_tools::RealtimeBuffer<geometry_msgs::msg::Vector3Stamped>
+      target_angle_rt_buffer_;
 
   // 命令和跟踪数据
   rm2_msgs::msg::GimbalCmd cmd_gimbal_;
   rm2_msgs::msg::TrackData data_track_;
+  geometry_msgs::msg::Vector3Stamped target_angle_cmd_;
 
   // 发布频率
   double publish_rate_ = 100.0;
@@ -227,6 +233,8 @@ protected:
 
   // RATE 模式启动对齐
   bool start_ = true;
+  bool target_angle_mode_last_active_ = false;
+  std::atomic<bool> target_angle_mode_active_{false};
 
   double yaw_des_ = 0.0;
   double pitch_des_ = 0.0;
@@ -249,8 +257,10 @@ private:
   void track(const rclcpp::Time &time);
   void direct(const rclcpp::Time &time);
   void traj(const rclcpp::Time &time);
+  void targetAngle(const rclcpp::Time &time);
 
   void setDes(const rclcpp::Time &time, const double yaw, const double pitch);
+  void setJointDes(const rclcpp::Time &time, double yaw, double pitch);
   // 限位检查
   bool setDesIntoLimit(double &des, const JointLimits &joint_limits);
 
@@ -269,6 +279,8 @@ private:
   // 控制指令回调函数
   void commandCallback(rm2_msgs::msg::GimbalCmd::ConstSharedPtr msg);
   void trackCallback(rm2_msgs::msg::TrackData::ConstSharedPtr msg);
+  void targetAngleCallback(
+      geometry_msgs::msg::Vector3Stamped::ConstSharedPtr msg);
 };
 
 } // namespace rm2_gimbal_controllers
