@@ -49,6 +49,8 @@ set(DEPENDENCIES
 
 add_library(${PROJECT_NAME} SHARED
   src/gimbal_base.cpp
+  src/joint_controller.cpp
+  src/pid_debug_publisher.cpp
   src/bullet_solver.cpp
   src/gimbal_controller.cpp
 )
