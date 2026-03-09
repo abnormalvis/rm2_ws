@@ -16,17 +16,42 @@
 #include <tf2_geometry_msgs/tf2_geometry_msgs.hpp>
 
 namespace rm2_gimbal_controllers {
+namespace {
+double pickIntegralLimit(std::shared_ptr<rclcpp_lifecycle::LifecycleNode> node,
+                         const std::string &max_name,
+                         const std::string &clamp_name) {
+  const double max_value = node->get_parameter(max_name).as_double();
+  const double clamp_value = node->get_parameter(clamp_name).as_double();
+  // 兼容历史配置：若 i_max 未配置而 i_clamp_* 有值，则使用 i_clamp_*
+  if (std::abs(max_value) < 1e-12 && std::abs(clamp_value) > 1e-12) {
+    return clamp_value;
+  }
+  return max_value;
+}
+} // namespace
+
 bool JointController::init(
     std::shared_ptr<rclcpp_lifecycle::LifecycleNode> node,
     const std::string &joint_prefix) {
   // 获取关节名称
   joint_name_ = node->get_parameter(joint_prefix + ".joint").as_string();
-  // 获取PID参数
-  p_gain_ = node->get_parameter(joint_prefix + ".pid.p").as_double();
-  i_gain_ = node->get_parameter(joint_prefix + ".pid.i").as_double();
-  d_gain_ = node->get_parameter(joint_prefix + ".pid.d").as_double();
-  i_max_ = node->get_parameter(joint_prefix + ".pid.i_max").as_double();
-  i_min_ = node->get_parameter(joint_prefix + ".pid.i_min").as_double();
+  // 内环速度 PID 参数
+  vel_p_gain_ = node->get_parameter(joint_prefix + ".pid.p").as_double();
+  vel_i_gain_ = node->get_parameter(joint_prefix + ".pid.i").as_double();
+  vel_d_gain_ = node->get_parameter(joint_prefix + ".pid.d").as_double();
+  vel_i_max_ = pickIntegralLimit(node, joint_prefix + ".pid.i_max",
+                                 joint_prefix + ".pid.i_clamp_max");
+  vel_i_min_ = pickIntegralLimit(node, joint_prefix + ".pid.i_min",
+                                 joint_prefix + ".pid.i_clamp_min");
+
+  // 外环位置 PID 参数
+  pos_p_gain_ = node->get_parameter(joint_prefix + ".pid_pos.p").as_double();
+  pos_i_gain_ = node->get_parameter(joint_prefix + ".pid_pos.i").as_double();
+  pos_d_gain_ = node->get_parameter(joint_prefix + ".pid_pos.d").as_double();
+  pos_i_max_ = pickIntegralLimit(node, joint_prefix + ".pid_pos.i_max",
+                                 joint_prefix + ".pid_pos.i_clamp_max");
+  pos_i_min_ = pickIntegralLimit(node, joint_prefix + ".pid_pos.i_min",
+                                 joint_prefix + ".pid_pos.i_clamp_min");
 
   // 获取关节限位
   if (node->has_parameter(joint_prefix + ".limits.max_position")) {
@@ -81,9 +106,21 @@ void JointController::assignCommandInterface(
 }
 
 void JointController::releaseInterfaces() {
+  reset();
   position_state_ = nullptr;
   velocity_state_ = nullptr;
   effort_command_ = nullptr;
+}
+
+void JointController::reset() {
+  position_error_ = 0.0;
+  position_error_last_ = 0.0;
+  velocity_error_ = 0.0;
+  velocity_error_last_ = 0.0;
+  pos_integral_error_ = 0.0;
+  vel_integral_error_ = 0.0;
+  outer_loop_velocity_reference_ = 0.0;
+  command_.effort_cmd_ = 0.0;
 }
 
 void JointController::setCommand(double position_cmd, double velocity_cmd) {
@@ -106,10 +143,15 @@ void JointController::setCommand(double position_cmd, double velocity_cmd) {
 
 void JointController::update(const rclcpp::Time & /*time*/,
                              const rclcpp::Duration &period) {
-  // 计算位置误差
   if (!position_state_ || !velocity_state_) {
     return;
   }
+
+  const double dt = period.seconds();
+  if (!(dt > 0.0) || !std::isfinite(dt)) {
+    return;
+  }
+
   // get_value() 已经被弃用，改用 get_optional()
   auto pos_opt = position_state_->get_optional();
   if (!pos_opt) {
@@ -125,20 +167,33 @@ void JointController::update(const rclcpp::Time & /*time*/,
     return;
   }
   double current_velocity = *vel_opt;
-  velocity_error_ = command_.velocity_cmd_ - current_velocity;
 
-  // 计算积分项
-  integral_error_ += position_error_ * period.seconds();
-  integral_error_ = std::clamp(integral_error_, i_min_, i_max_);
-
-  // 计算微分项
-  double derivative =
-      (position_error_ - position_error_last_) / period.seconds();
+  // 外环：姿态误差转角速度目标
+  pos_integral_error_ += position_error_ * dt;
+  pos_integral_error_ = std::clamp(pos_integral_error_, pos_i_min_, pos_i_max_);
+  const double pos_derivative = (position_error_ - position_error_last_) / dt;
   position_error_last_ = position_error_;
 
-  // PID控制律
-  command_.effort_cmd_ = p_gain_ * position_error_ + i_gain_ * integral_error_ +
-                         d_gain_ * derivative;
+  outer_loop_velocity_reference_ =
+      pos_p_gain_ * position_error_ + pos_i_gain_ * pos_integral_error_ +
+      pos_d_gain_ * pos_derivative;
+  double velocity_des =
+      command_.velocity_cmd_ + outer_loop_velocity_reference_;
+  if (joint_limits_.has_velocity_limits) {
+    velocity_des = std::clamp(velocity_des, -joint_limits_.max_velocity,
+                              joint_limits_.max_velocity);
+  }
+
+  // 内环：角速度误差转 effort
+  velocity_error_ = velocity_des - current_velocity;
+  vel_integral_error_ += velocity_error_ * dt;
+  vel_integral_error_ = std::clamp(vel_integral_error_, vel_i_min_, vel_i_max_);
+  const double vel_derivative = (velocity_error_ - velocity_error_last_) / dt;
+  velocity_error_last_ = velocity_error_;
+
+  command_.effort_cmd_ = vel_p_gain_ * velocity_error_ +
+                         vel_i_gain_ * vel_integral_error_ +
+                         vel_d_gain_ * vel_derivative;
 
   // 限制输出力矩
   if (joint_limits_.has_effort_limits) {
@@ -176,6 +231,16 @@ double JointController::getVelocity() const {
   }
   auto v = velocity_state_->get_optional();
   return v.value_or(0.0);
+}
+
+double JointController::getPositionError() const { return position_error_; }
+
+double JointController::getInnerLoopVelocityError() const {
+  return velocity_error_;
+}
+
+double JointController::getOuterLoopVelocityReference() const {
+  return outer_loop_velocity_reference_;
 }
 
 double JointController::getCommand() const { return command_.effort_cmd_; }
@@ -383,6 +448,39 @@ void GimbalControllerBase::movejoint(const rclcpp::Time &time,
 
   pitch_controller_.setEffort(pitch_controller_.getCommand() + pitch_extra);
   yaw_controller_.setEffort(yaw_controller_.getCommand() + yaw_extra);
+}
+
+void GimbalControllerBase::publishDebugState(const rclcpp::Time &time) {
+  if (publish_rate_ <= 0.0) {
+    return;
+  }
+
+  if ((last_debug_publish_time_ +
+       rclcpp::Duration::from_seconds(1.0 / publish_rate_)) >= time) {
+    return;
+  }
+
+  if (yaw_pid_debug_pub_) {
+    geometry_msgs::msg::Vector3Stamped msg;
+    msg.header.stamp = time;
+    msg.header.frame_id = gimbal_frame_id_;
+    msg.vector.x = yaw_controller_.getPositionError();
+    msg.vector.y = yaw_controller_.getOuterLoopVelocityReference();
+    msg.vector.z = yaw_controller_.getInnerLoopVelocityError();
+    yaw_pid_debug_pub_->publish(msg);
+  }
+
+  if (pitch_pid_debug_pub_) {
+    geometry_msgs::msg::Vector3Stamped msg;
+    msg.header.stamp = time;
+    msg.header.frame_id = gimbal_frame_id_;
+    msg.vector.x = pitch_controller_.getPositionError();
+    msg.vector.y = pitch_controller_.getOuterLoopVelocityReference();
+    msg.vector.z = pitch_controller_.getInnerLoopVelocityError();
+    pitch_pid_debug_pub_->publish(msg);
+  }
+
+  last_debug_publish_time_ = time;
 }
 
 void GimbalControllerBase::feedforwardCompensation(
@@ -720,6 +818,15 @@ controller_interface::CallbackReturn GimbalControllerBase::on_init() {
     auto_declare<double>("yaw.pid.d", 0.0);
     auto_declare<double>("yaw.pid.i_max", 0.0);
     auto_declare<double>("yaw.pid.i_min", 0.0);
+    auto_declare<double>("yaw.pid.i_clamp_max", 0.0);
+    auto_declare<double>("yaw.pid.i_clamp_min", 0.0);
+    auto_declare<double>("yaw.pid_pos.p", 0.0);
+    auto_declare<double>("yaw.pid_pos.i", 0.0);
+    auto_declare<double>("yaw.pid_pos.d", 0.0);
+    auto_declare<double>("yaw.pid_pos.i_max", 0.0);
+    auto_declare<double>("yaw.pid_pos.i_min", 0.0);
+    auto_declare<double>("yaw.pid_pos.i_clamp_max", 0.0);
+    auto_declare<double>("yaw.pid_pos.i_clamp_min", 0.0);
     auto_declare<double>("yaw.limits.max_position", 0.0);
     auto_declare<double>("yaw.limits.min_position", 0.0);
     auto_declare<double>("yaw.limits.max_velocity", 0.0);
@@ -732,6 +839,15 @@ controller_interface::CallbackReturn GimbalControllerBase::on_init() {
     auto_declare<double>("pitch.pid.d", 0.0);
     auto_declare<double>("pitch.pid.i_max", 0.0);
     auto_declare<double>("pitch.pid.i_min", 0.0);
+    auto_declare<double>("pitch.pid.i_clamp_max", 0.0);
+    auto_declare<double>("pitch.pid.i_clamp_min", 0.0);
+    auto_declare<double>("pitch.pid_pos.p", 0.0);
+    auto_declare<double>("pitch.pid_pos.i", 0.0);
+    auto_declare<double>("pitch.pid_pos.d", 0.0);
+    auto_declare<double>("pitch.pid_pos.i_max", 0.0);
+    auto_declare<double>("pitch.pid_pos.i_min", 0.0);
+    auto_declare<double>("pitch.pid_pos.i_clamp_max", 0.0);
+    auto_declare<double>("pitch.pid_pos.i_clamp_min", 0.0);
     auto_declare<double>("pitch.limits.max_position", 0.0);
     auto_declare<double>("pitch.limits.min_position", 0.0);
     auto_declare<double>("pitch.limits.max_velocity", 0.0);
@@ -889,6 +1005,12 @@ controller_interface::CallbackReturn GimbalControllerBase::on_configure(
 
   error_pub_ = get_node()->create_publisher<rm2_msgs::msg::GimbalDesError>(
       "~/error", rclcpp::QoS(10));
+    yaw_pid_debug_pub_ =
+      get_node()->create_publisher<geometry_msgs::msg::Vector3Stamped>(
+        "~/debug/yaw_pid", rclcpp::QoS(10));
+    pitch_pid_debug_pub_ =
+      get_node()->create_publisher<geometry_msgs::msg::Vector3Stamped>(
+        "~/debug/pitch_pid", rclcpp::QoS(10));
 
   gimbal_frame_id_ = "gimbal_des";
   odom2gimbal_des_.header.frame_id = "odom";
@@ -1091,10 +1213,14 @@ controller_interface::CallbackReturn GimbalControllerBase::on_activate(
     assignIMUinterfaces(state_interfaces_);
   }
 
+  yaw_controller_.reset();
+  pitch_controller_.reset();
+
   state_ = RATE;
   state_changed_ = true;
 
   last_publish_time_ = get_node()->now();
+  last_debug_publish_time_ = last_publish_time_;
 
   RCLCPP_INFO(get_node()->get_logger(), "Gimbal controller activated");
 
@@ -1139,6 +1265,8 @@ GimbalControllerBase::update(const rclcpp::Time &time,
   if (state_ != static_cast<ControlMode>(cmd_gimbal_.mode)) {
     state_ = static_cast<ControlMode>(cmd_gimbal_.mode);
     state_changed_ = true;
+    yaw_controller_.reset();
+    pitch_controller_.reset();
   }
 
   // 状态机执行
@@ -1162,6 +1290,7 @@ GimbalControllerBase::update(const rclcpp::Time &time,
 
   // 移动关节
   movejoint(time, period);
+  publishDebugState(time);
 
   return controller_interface::return_type::OK;
 }

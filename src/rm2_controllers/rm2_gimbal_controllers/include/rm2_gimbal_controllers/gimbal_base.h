@@ -1,6 +1,7 @@
 #pragma once
 
 #include "geometry_msgs/msg/transform_stamped.hpp"
+#include "geometry_msgs/msg/vector3_stamped.hpp"
 #include "rcl_interfaces/msg/set_parameters_result.hpp"
 #include "rm2_gimbal_controllers/bullet_solver.h"
 #include "rm2_msgs/msg/gimbal_cmd.hpp"
@@ -150,10 +151,14 @@ public:
       std::vector<hardware_interface::LoanedStateInterface> &interfaces);
 
   void releaseInterfaces();
+  void reset();
 
   void setCommand(double position_cmd, double velocity_cmd);
   void update(const rclcpp::Time &time, const rclcpp::Duration &period);
 
+  double getPositionError() const;
+  double getInnerLoopVelocityError() const;
+  double getOuterLoopVelocityReference() const;
   double getPosition() const;
   double getVelocity() const;
   double getCommand() const;
@@ -164,18 +169,28 @@ public:
   JointLimits joint_limits_;
 
 private:
-  // pid参数
-  double p_gain_ = 0.0;
-  double i_gain_ = 0.0;
-  double d_gain_ = 0.0;
-  double i_max_ = 0.0;
-  double i_min_ = 0.0;
+  // 外环位置 PID 参数（position -> velocity）
+  double pos_p_gain_ = 0.0;
+  double pos_i_gain_ = 0.0;
+  double pos_d_gain_ = 0.0;
+  double pos_i_max_ = 0.0;
+  double pos_i_min_ = 0.0;
 
-  // pid状态
+  // 内环速度 PID 参数（velocity -> effort）
+  double vel_p_gain_ = 0.0;
+  double vel_i_gain_ = 0.0;
+  double vel_d_gain_ = 0.0;
+  double vel_i_max_ = 0.0;
+  double vel_i_min_ = 0.0;
+
+  // PID 状态
   double position_error_ = 0.0;
   double position_error_last_ = 0.0;
   double velocity_error_ = 0.0;
-  double integral_error_ = 0.0;
+  double velocity_error_last_ = 0.0;
+  double pos_integral_error_ = 0.0;
+  double vel_integral_error_ = 0.0;
+  double outer_loop_velocity_reference_ = 0.0;
 
   // 命令和状态
   struct command {
@@ -270,6 +285,10 @@ protected:
 
   // 发布器
   rclcpp::Publisher<rm2_msgs::msg::GimbalDesError>::SharedPtr error_pub_;
+    rclcpp::Publisher<geometry_msgs::msg::Vector3Stamped>::SharedPtr
+      yaw_pid_debug_pub_;
+    rclcpp::Publisher<geometry_msgs::msg::Vector3Stamped>::SharedPtr
+      pitch_pid_debug_pub_;
 
   // 实时缓冲区
   realtime_tools::RealtimeBuffer<rm2_msgs::msg::GimbalCmd> cmd_rt_buffer_;
@@ -282,6 +301,7 @@ protected:
   // 发布频率
   double publish_rate_ = 100.0;
   rclcpp::Time last_publish_time_;
+  rclcpp::Time last_debug_publish_time_;
 
   // 动态配置（对齐 ROS1 的 dynamic_reconfigure + RT buffer）
   GimbalConfig config_{};
@@ -325,6 +345,7 @@ private:
 
   // 关节运动控制
   void movejoint(const rclcpp::Time &time, const rclcpp::Duration &period);
+  void publishDebugState(const rclcpp::Time &time);
 
   // 前馈补偿
   void feedforwardCompensation(const rclcpp::Time &time);
