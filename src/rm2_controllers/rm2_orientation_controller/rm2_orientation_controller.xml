@@ -1,0 +1,9 @@
+<library path="rm2_orientation_controller">
+    <class name="rm2_orientation_controller/OrientationController"
+           type="rm2_orientation_controller::OrientationController"
+           base_class_type="controller_interface::ControllerInterface">
+        <description>
+            The rm2_orientation_controller for controlling robot orientation.
+        </description>
+    </class>
+</library>

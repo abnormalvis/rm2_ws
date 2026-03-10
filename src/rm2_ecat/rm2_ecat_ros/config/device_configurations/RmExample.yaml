@@ -1,14 +1,14 @@
 can_motors:
   - can_id: 1
     can_bus: 0
-    name: "test_motor"
+    name: "yaw_motor"
     type: "M3508"
     need_calibration: false
-#   - can_id: 2
-#     can_bus: 0
-#     name: "other_motor"
-#     type: "M6020"
-#     need_calibration: false
+  - can_id: 2
+    can_bus: 0
+    name: "pitch_motor"
+    type: "M3508"
+    need_calibration: false
 # can_imus:
 #   - can_bus: 1
 #     name: "gimbal_imu"
