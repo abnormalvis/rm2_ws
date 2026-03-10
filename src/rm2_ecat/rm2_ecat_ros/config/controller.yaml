@@ -1,14 +1,14 @@
-test_pid_controller:
-  ros__parameters:
-    dof_names:
-      - test_joint
+# test_pid_controller:
+#   ros__parameters:
+#     dof_names:
+#       - test_joint
 
-    command_interface: effort
+#     command_interface: effort
 
-    reference_and_state_interfaces: ["velocity"]
+#     reference_and_state_interfaces: ["velocity"]
 
-    gains:
-      test_joint: {p: 0.3, i: 0.2, d: 0.0, u_clamp_max: 4.0, u_clamp_min: -4.0, activate_state_publisher: true}
+#     gains:
+#       test_joint: {p: 0.3, i: 0.2, d: 0.0, u_clamp_max: 4.0, u_clamp_min: -4.0, activate_state_publisher: true}
 
 # test_calibration_controller:
 #   ros__parameters:
@@ -19,3 +19,124 @@ test_pid_controller:
 #     velocity:
 #       pid: {p: 0.5, i: 0.0, d: 0.0, u_clamp_max: 2.0, u_clamp_min: -2.0}
 #       vel_threshold: 0.001
+
+test_gimbal_controller:
+  ros__parameters:
+    # ==================== YAW轴配置 ====================
+    yaw:
+      # 关节硬件接口名称（必须与URDF中的关节名称一致）
+      joint: "yaw_motor"
+      
+      # PID控制参数
+      pid:
+        p: 0.5          # 比例增益 (P term)
+        i: 10.0          # 积分增益 (I term)
+        d: 0.0         # 微分增益 (D term)
+        i_max: 3.0    # 积分项上限
+        i_min: -3.0   # 积分项下限
+
+      # 外环位置PID参数（串级PID外环）
+      pid_pos:
+        p: 3.0
+        i: 0.0
+        d: 0.0
+        i_max: 1.0
+        i_min: -1.0
+      
+      # 关节物理限位
+      limits:
+        max_position: 3.14159    # 最大位置 (rad)
+        min_position: -3.14159   # 最小位置 (rad)
+        max_velocity: 10.0       # 最大速度 (rad/s)
+        max_effort: 30.0         # 最大力矩 (N·m)
+      
+      # 父连杆（用于TF变换）
+      parent_link: "base_link"
+
+      # ==================== YAW轴摩擦补偿 ====================
+      resistance_compensation:
+        resistance: 2.0        # 摩擦力补偿系数
+        error_tolerance: 0.1   # 误差容限 (rad)
+      k_chassis_vel: 0.5       # 底盘速度对yaw的耦合系数
+
+    # ==================== PITCH轴配置 ====================
+    pitch:
+      # 关节硬件接口名称
+      joint: "pitch_motor"
+      
+      # PID控制参数
+      pid:
+        p: 0.5         # PITCH通常比YAW小
+        i: 10.0
+        d: 0.0
+        i_max: 3.0
+        i_min: -3.0
+
+      # 外环位置PID参数（串级PID外环）
+      pid_pos:
+        p: 3.0
+        i: 0.0
+        d: 0.0
+        i_max: 1.0
+        i_min: -1.0
+      
+      # 关节物理限位
+      limits:
+        max_position: 1.5708     # 约90度
+        min_position: -1.5708    # 约-90度
+        max_velocity: 8.0
+        max_effort: 25.0
+      
+      parent_link: "base_link"
+
+    # ==================== 重力补偿配置 ====================
+    feedforward:
+      enable: true             # 是否启用重力补偿（pitch轴推荐启用）
+      mass_origin:
+        x: 0.1                 # 云台质心相对于pitch轴的x距离 (m)
+        z: 0.05                # 云台质心相对于pitch轴的z距离 (m)
+      gravity: 9.8             # 重力加速度 (m/s²)
+
+    # ==================== 速度前馈系数 ====================
+    yaw_k_v: 0.0               # yaw速度前馈系数
+    pitch_k_v: 0.0             # pitch速度前馈系数
+
+    # ==================== 底盘补偿参数 ====================
+    # 模型: compensation = a * sin(b * chassis_angular_z + c) + d
+    chassis_compensation:
+      a: 0.0                   # 振幅
+      b: 1.0                   # 频率
+      c: 0.0                   # 相位
+      d: 0.0                   # 偏移
+
+    # ==================== 加速度补偿表 ====================
+    accel_pitch: [0.0]         # pitch加速度补偿表（可选，空数组会导致类型无法推断）
+    accel_yaw: [0.0]           # yaw加速度补偿表（可选，空数组会导致类型无法推断）
+
+    # ==================== 底盘速度滤波 ====================
+    chassis_vel:
+      cutoff_frequency: 20.0   # 一阶低通滤波器截止频率 (Hz)
+
+    # ==================== 弹道求解器参数 ====================
+    bullet_solver:
+      resistance_coff: 0.001           # 空气阻力系数（一阶）
+      resistance_coff_qd_10: 0.0008    # 10 m/s时的阻力系数
+      resistance_coff_qd_15: 0.0009    # 15 m/s时的阻力系数
+      resistance_coff_qd_16: 0.00095   # 16 m/s时的阻力系数
+      resistance_coff_qd_18: 0.001     # 18 m/s时的阻力系数
+      resistance_coff_qd_30: 0.0015    # 30 m/s时的阻力系数
+      g: 9.8                           # 重力加速度
+      max_iter: 20                     # 最大迭代次数
+
+    # ==================== IMU配置 ====================
+    imu_name: ""               # IMU硬件接口名称（为空表示不使用IMU）
+    imu_frame_id: "imu_link"   # IMU坐标系
+
+    # ==================== 发布配置 ====================
+    publish_rate: 100.0        # 发布误差信息的频率 (Hz)
+
+test_effort_controller:
+  ros__parameters:
+    joints:
+      - yaw_motor
+      - pitch_motor

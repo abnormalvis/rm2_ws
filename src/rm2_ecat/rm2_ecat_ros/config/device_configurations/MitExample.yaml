@@ -1,14 +1,14 @@
 can_motors:
   - can_id: 1
-    can_bus: 0
-    name: "test_motor"
+    can_bus: 1
+    name: "yaw_motor"
     type: "DM4310"
     need_calibration: false
-#   - can_id: 2
-#     can_bus: 0
-#     name: "other_motor"
-#     type: "DM4310"
-#     need_calibration: false
+  - can_id: 2
+    can_bus: 1
+    name: "pitch_motor"
+    type: "DM4310"
+    need_calibration: false
 # gpios:
 #   - name: "output"
 #     pin: 0

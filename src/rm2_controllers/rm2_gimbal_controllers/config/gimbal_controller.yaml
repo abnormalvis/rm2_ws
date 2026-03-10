@@ -1,0 +1,75 @@
+gimbal_controller:
+  ros__parameters:
+    yaw:
+      joint: "yaw_motor"
+      pid:
+        p: 1.0
+        i: 0.0
+        d: 0.0
+        i_max: 0.0
+        i_min: 0.0
+      pid_pos:
+        p: 2.0
+        i: 0.0
+        d: 0.0
+        i_max: 0.0
+        i_min: 0.0
+      limits:
+        max_position: 3.14159
+        min_position: -3.14159
+        max_velocity: 10.0
+        max_effort: 30.0
+      parent_link: "base_link"
+      resistance_compensation:
+        resistance: 2.0
+        error_tolerance: 0.1
+      k_chassis_vel: 0.5
+
+    pitch:
+      joint: "pitch_motor"
+      pid:
+        p: 1.0
+        i: 0.0
+        d: 0.0
+        i_max: 0.0
+        i_min: 0.0
+      pid_pos:
+        p: 2.0
+        i: 0.0
+        d: 0.0
+        i_max: 0.0
+        i_min: 0.0
+      limits:
+        max_position: 1.5708
+        min_position: -1.5708
+        max_velocity: 8.0
+        max_effort: 25.0
+      parent_link: "base_link"
+
+    feedforward:
+      enable: true
+      mass_origin:
+        x: 0.1
+        z: 0.05
+      gravity: 9.8
+
+    yaw_k_v: 0.0
+    pitch_k_v: 0.0
+
+    chassis_compensation:
+      a: 0.0
+      b: 1.0
+      c: 0.0
+      d: 0.0
+
+    accel_pitch: [0.0]
+    accel_yaw: [0.0]
+
+    chassis_vel:
+      cutoff_frequency: 20.0
+
+    imu_name: ""
+    imu_frame_id: "imu_link"
+
+    # 用于 ~/debug/* 调试话题（包含 yaw_target/pitch_target）发布频率
+    publish_rate: 100.0
