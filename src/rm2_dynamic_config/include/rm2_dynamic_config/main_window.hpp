@@ -15,13 +15,21 @@ class QLabel;
 class QLineEdit;
 class QPushButton;
 class QDoubleSpinBox;
+class QSpinBox;
 class QComboBox;
 class QTimer;
+class QVBoxLayout;
+class QWidget;
 
 namespace rm2_dynamic_config {
 
+enum class ParamValueType { kDouble, kInteger };
+
 struct ParamSpec {
   std::string name;
+  std::string label;
+  std::string group;
+  ParamValueType type;
   double min;
   double max;
   double step;
@@ -57,6 +65,13 @@ private:
   void updateWidgets(const std::vector<rclcpp::Parameter> &params);
   void handleParameterEvents(
       const rcl_interfaces::msg::ParameterEvent::SharedPtr msg);
+  void loadDefaultSchema();
+  bool loadSchemaFile(const QString &schema_path, QString *error);
+  void rebuildParameterEditors();
+  bool setWidgetNumericValue(const QString &name, double value);
+  bool readWidgetParameter(const QString &name, rclcpp::Parameter *out_param) const;
+  bool makeParameterFromDouble(const QString &name, double value,
+                               rclcpp::Parameter *out_param) const;
   bool exportSnapshot(const QString &file_path);
   bool importSnapshot(const QString &file_path,
                       std::vector<rclcpp::Parameter> *params,
@@ -67,7 +82,9 @@ private:
   SubmitMode currentSubmitMode() const;
 
   std::vector<ParamSpec> param_specs_;
-  QMap<QString, QDoubleSpinBox *> param_inputs_;
+  QMap<QString, ParamSpec> param_spec_map_;
+  QMap<QString, QWidget *> param_inputs_;
+  QVBoxLayout *param_groups_layout_{nullptr};
 
   QLineEdit *target_node_edit_{nullptr};
   QPushButton *connect_btn_{nullptr};
@@ -87,6 +104,8 @@ private:
   bool connected_{false};
   bool updating_widgets_{false};
   QString connected_target_node_;
+  QString schema_path_;
+  QString schema_target_node_default_;
   QString last_yaml_path_;
   QSet<QString> dirty_params_;
   QSet<QString> immediate_pending_params_;

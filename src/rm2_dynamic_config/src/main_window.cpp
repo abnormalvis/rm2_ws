@@ -1,21 +1,28 @@
 #include "rm2_dynamic_config/main_window.hpp"
 
+#include <QComboBox>
+#include <QDateTime>
 #include <QDoubleSpinBox>
 #include <QFileDialog>
-#include <QDateTime>
 #include <QFileInfo>
 #include <QFormLayout>
+#include <QGroupBox>
 #include <QHBoxLayout>
 #include <QLabel>
+#include <QLayout>
 #include <QLineEdit>
 #include <QPushButton>
-#include <QComboBox>
 #include <QSignalBlocker>
+#include <QSpinBox>
 #include <QTimer>
 #include <QVBoxLayout>
 #include <QWidget>
 
+#include <algorithm>
 #include <chrono>
+#include <cmath>
+#include <cstring>
+#include <cstdlib>
 #include <fstream>
 #include <unordered_map>
 
@@ -28,6 +35,14 @@
 namespace rm2_dynamic_config {
 
 namespace {
+
+constexpr const char *kFallbackTargetNode = "/gimbal_controller";
+
+#ifdef RM2_DYNAMIC_CONFIG_DEFAULT_SCHEMA
+constexpr const char *kDefaultSchemaPath = RM2_DYNAMIC_CONFIG_DEFAULT_SCHEMA;
+#else
+constexpr const char *kDefaultSchemaPath = "";
+#endif
 
 std::string normalizeNodeName(const std::string &name) {
   if (name.empty() || name.front() != '/') {
@@ -74,25 +89,63 @@ void flattenRosParameters(const YAML::Node &node, const std::string &prefix,
   }
 }
 
+ParamValueType parseParamType(const std::string &type_str) {
+  if (type_str == "int" || type_str == "integer") {
+    return ParamValueType::kInteger;
+  }
+  return ParamValueType::kDouble;
+}
+
+void clearLayout(QLayout *layout) {
+  if (!layout) {
+    return;
+  }
+
+  QLayoutItem *item = nullptr;
+  while ((item = layout->takeAt(0)) != nullptr) {
+    if (item->layout()) {
+      clearLayout(item->layout());
+      delete item->layout();
+    }
+    if (item->widget()) {
+      delete item->widget();
+    }
+    delete item;
+  }
+}
+
 }  // namespace
 
 MainWindow::MainWindow(QWidget *parent)
-    : QMainWindow(parent),
-      param_specs_({
-          {"publish_rate", 1.0, 500.0, 1.0, 0},
-          {"yaw_k_v", -20.0, 20.0, 0.01, 3},
-          {"pitch_k_v", -20.0, 20.0, 0.01, 3},
-          {"chassis_compensation.a", -20.0, 20.0, 0.01, 3},
-          {"chassis_compensation.b", -50.0, 50.0, 0.01, 3},
-          {"chassis_compensation.c", -20.0, 20.0, 0.01, 3},
-          {"chassis_compensation.d", -20.0, 20.0, 0.01, 3},
-          {"chassis_vel.cutoff_frequency", 0.1, 200.0, 0.1, 2},
-          {"yaw.k_chassis_vel", -20.0, 20.0, 0.01, 3},
-          {"yaw.resistance_compensation.resistance", -20.0, 20.0, 0.01, 3},
-          {"yaw.resistance_compensation.error_tolerance", 0.0, 10.0, 0.01, 3},
-      }) {
+    : QMainWindow(parent) {
   node_ = std::make_shared<rclcpp::Node>("rm2_dynamic_config_gui");
+  loadDefaultSchema();
+
+  QString schema_load_result;
+  if (std::strlen(kDefaultSchemaPath) > 0) {
+    schema_path_ = QString::fromUtf8(kDefaultSchemaPath);
+    QString error;
+    if (!loadSchemaFile(schema_path_, &error)) {
+      schema_load_result = QString("Schema fallback: %1").arg(error);
+    }
+  }
+
+  if (const char *env_schema = std::getenv("RM2_DYNAMIC_CONFIG_SCHEMA");
+      env_schema != nullptr && std::strlen(env_schema) > 0) {
+    const QString env_path = QString::fromLocal8Bit(env_schema);
+    QString error;
+    if (loadSchemaFile(env_path, &error)) {
+      schema_path_ = env_path;
+      schema_load_result = QString("Schema loaded: %1").arg(schema_path_);
+    } else {
+      schema_load_result = QString("Schema fallback: %1").arg(error);
+    }
+  }
+
   buildUi();
+  if (!schema_load_result.isEmpty()) {
+    setStatus(schema_load_result);
+  }
 
   spin_timer_ = new QTimer(this);
   spin_timer_->setInterval(20);
@@ -112,7 +165,7 @@ void MainWindow::buildUi() {
 
   auto *target_layout = new QHBoxLayout();
   target_layout->addWidget(new QLabel("Target Node", this));
-  target_node_edit_ = new QLineEdit("/gimbal_controller", this);
+  target_node_edit_ = new QLineEdit(schema_target_node_default_, this);
   target_layout->addWidget(target_node_edit_);
 
   connect_btn_ = new QPushButton("Connect", this);
@@ -133,22 +186,13 @@ void MainWindow::buildUi() {
 
   main_layout->addLayout(target_layout);
 
-  auto *form_layout = new QFormLayout();
-  for (const auto &spec : param_specs_) {
-    auto *input = new QDoubleSpinBox(this);
-    input->setRange(spec.min, spec.max);
-    input->setSingleStep(spec.step);
-    input->setDecimals(spec.decimals);
-    input->setEnabled(false);
+  auto *param_editor_widget = new QWidget(this);
+  param_groups_layout_ = new QVBoxLayout(param_editor_widget);
+  param_groups_layout_->setContentsMargins(0, 0, 0, 0);
+  param_groups_layout_->setSpacing(8);
+  main_layout->addWidget(param_editor_widget);
 
-    const QString key = QString::fromStdString(spec.name);
-    form_layout->addRow(key, input);
-    param_inputs_.insert(key, input);
-    connect(input, qOverload<double>(&QDoubleSpinBox::valueChanged), this,
-            [this, key](double) { onParameterInputChanged(key); });
-  }
-
-  main_layout->addLayout(form_layout);
+  rebuildParameterEditors();
 
   status_label_ = new QLabel("Disconnected", this);
   main_layout->addWidget(status_label_);
@@ -162,9 +206,9 @@ void MainWindow::buildUi() {
   connect(refresh_btn_, &QPushButton::clicked, this,
           &MainWindow::onRefreshClicked);
   connect(apply_btn_, &QPushButton::clicked, this, &MainWindow::onApplyClicked);
-    connect(export_yaml_btn_, &QPushButton::clicked, this,
+  connect(export_yaml_btn_, &QPushButton::clicked, this,
       &MainWindow::onExportYamlClicked);
-    connect(import_yaml_btn_, &QPushButton::clicked, this,
+  connect(import_yaml_btn_, &QPushButton::clicked, this,
       &MainWindow::onImportYamlClicked);
   connect(submit_mode_combo_, qOverload<int>(&QComboBox::currentIndexChanged),
       this, [this](int) { updateUiState(); });
@@ -178,7 +222,9 @@ void MainWindow::setStatus(const QString &text) {
 
 void MainWindow::setControlsEnabled(bool enabled) {
   for (auto it = param_inputs_.begin(); it != param_inputs_.end(); ++it) {
-    it.value()->setEnabled(enabled);
+    if (it.value()) {
+      it.value()->setEnabled(enabled);
+    }
   }
   updateUiState();
 }
@@ -219,6 +265,9 @@ void MainWindow::onConnectClicked() {
   connected_target_node_ = QString::fromStdString(target);
   dirty_params_.clear();
   immediate_pending_params_.clear();
+  if (immediate_apply_timer_) {
+    immediate_apply_timer_->stop();
+  }
   subscribeParameterEvents();
   setControlsEnabled(true);
   setStatus(QString("Connected: %1").arg(connected_target_node_));
@@ -250,26 +299,7 @@ void MainWindow::requestRefresh() {
   }
 
   const auto params = future.get();
-  if (params.size() != param_specs_.size()) {
-    setStatus("Refresh failed: unexpected parameter count");
-    return;
-  }
-
-  updating_widgets_ = true;
-  for (const auto &param : params) {
-    const QString key = QString::fromStdString(param.get_name());
-    if (!param_inputs_.contains(key)) {
-      continue;
-    }
-
-    QSignalBlocker blocker(param_inputs_[key]);
-    if (param.get_type() == rclcpp::ParameterType::PARAMETER_DOUBLE) {
-      param_inputs_[key]->setValue(param.as_double());
-    } else if (param.get_type() == rclcpp::ParameterType::PARAMETER_INTEGER) {
-      param_inputs_[key]->setValue(static_cast<double>(param.as_int()));
-    }
-  }
-  updating_widgets_ = false;
+  updateWidgets(params);
 
   dirty_params_.clear();
   immediate_pending_params_.clear();
@@ -380,11 +410,10 @@ void MainWindow::onImmediateApplyTimeout() {
   std::vector<rclcpp::Parameter> params;
   params.reserve(immediate_pending_params_.size());
   for (const auto &key : immediate_pending_params_) {
-    const auto *widget = param_inputs_.value(key, nullptr);
-    if (!widget) {
-      continue;
+    rclcpp::Parameter param;
+    if (readWidgetParameter(key, &param)) {
+      params.push_back(param);
     }
-    params.emplace_back(key.toStdString(), widget->value());
   }
 
   if (params.empty()) {
@@ -421,16 +450,10 @@ void MainWindow::updateWidgets(const std::vector<rclcpp::Parameter> &params) {
   updating_widgets_ = true;
   for (const auto &param : params) {
     const QString key = QString::fromStdString(param.get_name());
-    auto *widget = param_inputs_.value(key, nullptr);
-    if (!widget) {
-      continue;
-    }
-
-    QSignalBlocker blocker(widget);
     if (param.get_type() == rclcpp::ParameterType::PARAMETER_DOUBLE) {
-      widget->setValue(param.as_double());
+      setWidgetNumericValue(key, param.as_double());
     } else if (param.get_type() == rclcpp::ParameterType::PARAMETER_INTEGER) {
-      widget->setValue(static_cast<double>(param.as_int()));
+      setWidgetNumericValue(key, static_cast<double>(param.as_int()));
     }
   }
   updating_widgets_ = false;
@@ -480,8 +503,7 @@ void MainWindow::handleParameterEvents(
     }
 
     updating_widgets_ = true;
-    QSignalBlocker blocker(widget);
-    widget->setValue(value);
+    setWidgetNumericValue(key, value);
     updating_widgets_ = false;
     dirty_params_.remove(key);
     immediate_pending_params_.remove(key);
@@ -514,11 +536,10 @@ std::vector<rclcpp::Parameter> MainWindow::buildParameterList(bool only_dirty) c
       continue;
     }
 
-    const auto *widget = param_inputs_.value(key, nullptr);
-    if (!widget) {
-      continue;
+    rclcpp::Parameter param;
+    if (readWidgetParameter(key, &param)) {
+      params.push_back(param);
     }
-    params.emplace_back(spec.name, widget->value());
   }
 
   return params;
@@ -535,11 +556,16 @@ bool MainWindow::exportSnapshot(const QString &file_path) {
   YAML::Node params_node;
   for (const auto &spec : param_specs_) {
     const QString key = QString::fromStdString(spec.name);
-    const auto *widget = param_inputs_.value(key, nullptr);
-    if (!widget) {
+    rclcpp::Parameter param;
+    if (!readWidgetParameter(key, &param)) {
       continue;
     }
-    params_node[spec.name] = widget->value();
+
+    if (param.get_type() == rclcpp::ParameterType::PARAMETER_INTEGER) {
+      params_node[spec.name] = param.as_int();
+    } else {
+      params_node[spec.name] = param.as_double();
+    }
   }
   snapshot["parameters"] = params_node;
   root["snapshot"] = snapshot;
@@ -624,11 +650,16 @@ bool MainWindow::importSnapshot(const QString &file_path,
   int unknown_count = 0;
   for (const auto &item : imported) {
     const QString key = QString::fromStdString(item.first);
-    if (!param_inputs_.contains(key)) {
+    if (!param_spec_map_.contains(key)) {
       ++unknown_count;
       continue;
     }
-    params->emplace_back(item.first, item.second);
+
+    rclcpp::Parameter param;
+    if (!makeParameterFromDouble(key, item.second, &param)) {
+      continue;
+    }
+    params->push_back(param);
   }
 
   if (params->empty()) {
@@ -673,6 +704,264 @@ bool MainWindow::applyParameters(const std::vector<rclcpp::Parameter> &params,
   }
 
   setStatus(QString("%1 ok").arg(source));
+  return true;
+}
+
+void MainWindow::loadDefaultSchema() {
+  schema_target_node_default_ = kFallbackTargetNode;
+  param_specs_ = {
+      {"publish_rate", "publish_rate", "Controller", ParamValueType::kInteger,
+       1.0, 500.0, 1.0, 0},
+      {"yaw_k_v", "yaw_k_v", "Velocity", ParamValueType::kDouble,
+       -20.0, 20.0, 0.01, 3},
+      {"pitch_k_v", "pitch_k_v", "Velocity", ParamValueType::kDouble,
+       -20.0, 20.0, 0.01, 3},
+      {"chassis_compensation.a", "chassis_compensation.a", "Compensation",
+       ParamValueType::kDouble, -20.0, 20.0, 0.01, 3},
+      {"chassis_compensation.b", "chassis_compensation.b", "Compensation",
+       ParamValueType::kDouble, -50.0, 50.0, 0.01, 3},
+      {"chassis_compensation.c", "chassis_compensation.c", "Compensation",
+       ParamValueType::kDouble, -20.0, 20.0, 0.01, 3},
+      {"chassis_compensation.d", "chassis_compensation.d", "Compensation",
+       ParamValueType::kDouble, -20.0, 20.0, 0.01, 3},
+      {"chassis_vel.cutoff_frequency", "chassis_vel.cutoff_frequency", "Compensation",
+       ParamValueType::kDouble, 0.1, 200.0, 0.1, 2},
+      {"yaw.k_chassis_vel", "yaw.k_chassis_vel", "Yaw", ParamValueType::kDouble,
+       -20.0, 20.0, 0.01, 3},
+      {"yaw.resistance_compensation.resistance", "yaw.resistance_compensation.resistance",
+       "Yaw", ParamValueType::kDouble, -20.0, 20.0, 0.01, 3},
+      {"yaw.resistance_compensation.error_tolerance",
+       "yaw.resistance_compensation.error_tolerance", "Yaw", ParamValueType::kDouble,
+       0.0, 10.0, 0.01, 3},
+  };
+
+  param_spec_map_.clear();
+  for (const auto &spec : param_specs_) {
+    param_spec_map_.insert(QString::fromStdString(spec.name), spec);
+  }
+}
+
+bool MainWindow::loadSchemaFile(const QString &schema_path, QString *error) {
+  YAML::Node root;
+  try {
+    root = YAML::LoadFile(schema_path.toStdString());
+  } catch (const YAML::Exception &e) {
+    if (error) {
+      *error = QString("cannot parse schema %1 (%2)").arg(schema_path, e.what());
+    }
+    return false;
+  }
+
+  const YAML::Node parameters = root["parameters"];
+  if (!parameters || !parameters.IsSequence()) {
+    if (error) {
+      *error = QString("schema %1 missing 'parameters' list").arg(schema_path);
+    }
+    return false;
+  }
+
+  std::vector<ParamSpec> parsed_specs;
+  parsed_specs.reserve(parameters.size());
+  QMap<QString, ParamSpec> parsed_map;
+
+  for (std::size_t i = 0; i < parameters.size(); ++i) {
+    const YAML::Node entry = parameters[i];
+    if (!entry.IsMap() || !entry["name"] || !entry["name"].IsScalar()) {
+      continue;
+    }
+
+    ParamSpec spec;
+    spec.name = entry["name"].as<std::string>();
+    spec.label = entry["label"] && entry["label"].IsScalar()
+                     ? entry["label"].as<std::string>()
+                     : spec.name;
+    spec.group = entry["group"] && entry["group"].IsScalar()
+                     ? entry["group"].as<std::string>()
+                     : "General";
+    spec.type = entry["type"] && entry["type"].IsScalar()
+                    ? parseParamType(entry["type"].as<std::string>())
+                    : ParamValueType::kDouble;
+
+    const bool is_integer = spec.type == ParamValueType::kInteger;
+    spec.min = entry["min"] && entry["min"].IsScalar()
+                   ? entry["min"].as<double>()
+                   : (is_integer ? -1000.0 : -100.0);
+    spec.max = entry["max"] && entry["max"].IsScalar()
+                   ? entry["max"].as<double>()
+                   : (is_integer ? 1000.0 : 100.0);
+    spec.step = entry["step"] && entry["step"].IsScalar()
+                    ? entry["step"].as<double>()
+                    : (is_integer ? 1.0 : 0.01);
+    spec.decimals = entry["decimals"] && entry["decimals"].IsScalar()
+                        ? entry["decimals"].as<int>()
+                        : (is_integer ? 0 : 3);
+
+    if (spec.max < spec.min) {
+      std::swap(spec.min, spec.max);
+    }
+    if (spec.step <= 0.0) {
+      spec.step = is_integer ? 1.0 : 0.01;
+    }
+    if (spec.decimals < 0) {
+      spec.decimals = is_integer ? 0 : 3;
+    }
+
+    const QString key = QString::fromStdString(spec.name);
+    if (parsed_map.contains(key)) {
+      continue;
+    }
+
+    parsed_map.insert(key, spec);
+    parsed_specs.push_back(spec);
+  }
+
+  if (parsed_specs.empty()) {
+    if (error) {
+      *error = QString("schema %1 has no valid parameter entries").arg(schema_path);
+    }
+    return false;
+  }
+
+  if (root["target_node_default"] && root["target_node_default"].IsScalar()) {
+    schema_target_node_default_ =
+        QString::fromStdString(root["target_node_default"].as<std::string>());
+  }
+
+  param_specs_ = parsed_specs;
+  param_spec_map_ = parsed_map;
+  return true;
+}
+
+void MainWindow::rebuildParameterEditors() {
+  if (!param_groups_layout_) {
+    return;
+  }
+
+  clearLayout(param_groups_layout_);
+  param_inputs_.clear();
+
+  QMap<QString, QFormLayout *> group_forms;
+  for (const auto &spec : param_specs_) {
+    const QString group = QString::fromStdString(spec.group.empty() ? "General" : spec.group);
+    QFormLayout *form = group_forms.value(group, nullptr);
+    if (!form) {
+      auto *box = new QGroupBox(group, this);
+      form = new QFormLayout(box);
+      form->setFieldGrowthPolicy(QFormLayout::AllNonFixedFieldsGrow);
+      box->setLayout(form);
+      param_groups_layout_->addWidget(box);
+      group_forms.insert(group, form);
+    }
+
+    const QString key = QString::fromStdString(spec.name);
+    const QString label = QString::fromStdString(spec.label);
+    QWidget *input = nullptr;
+
+    if (spec.type == ParamValueType::kInteger) {
+      auto *spin = new QSpinBox(this);
+      spin->setRange(static_cast<int>(std::lround(spec.min)),
+                     static_cast<int>(std::lround(spec.max)));
+      spin->setSingleStep(std::max(1, static_cast<int>(std::lround(spec.step))));
+      spin->setEnabled(false);
+      connect(spin, qOverload<int>(&QSpinBox::valueChanged), this,
+              [this, key](int) { onParameterInputChanged(key); });
+      input = spin;
+    } else {
+      auto *spin = new QDoubleSpinBox(this);
+      spin->setRange(spec.min, spec.max);
+      spin->setSingleStep(spec.step);
+      spin->setDecimals(spec.decimals);
+      spin->setEnabled(false);
+      connect(spin, qOverload<double>(&QDoubleSpinBox::valueChanged), this,
+              [this, key](double) { onParameterInputChanged(key); });
+      input = spin;
+    }
+
+    form->addRow(label, input);
+    param_inputs_.insert(key, input);
+  }
+
+  param_groups_layout_->addStretch(1);
+}
+
+bool MainWindow::setWidgetNumericValue(const QString &name, double value) {
+  const auto spec_it = param_spec_map_.find(name);
+  if (spec_it == param_spec_map_.end()) {
+    return false;
+  }
+
+  QWidget *widget = param_inputs_.value(name, nullptr);
+  if (!widget) {
+    return false;
+  }
+
+  QSignalBlocker blocker(widget);
+  if (spec_it->type == ParamValueType::kInteger) {
+    auto *spin = qobject_cast<QSpinBox *>(widget);
+    if (!spin) {
+      return false;
+    }
+    spin->setValue(static_cast<int>(std::lround(value)));
+    return true;
+  }
+
+  auto *spin = qobject_cast<QDoubleSpinBox *>(widget);
+  if (!spin) {
+    return false;
+  }
+  spin->setValue(value);
+  return true;
+}
+
+bool MainWindow::readWidgetParameter(const QString &name,
+                                     rclcpp::Parameter *out_param) const {
+  if (!out_param) {
+    return false;
+  }
+
+  const auto spec_it = param_spec_map_.find(name);
+  if (spec_it == param_spec_map_.end()) {
+    return false;
+  }
+
+  QWidget *widget = param_inputs_.value(name, nullptr);
+  if (!widget) {
+    return false;
+  }
+
+  if (spec_it->type == ParamValueType::kInteger) {
+    const auto *spin = qobject_cast<const QSpinBox *>(widget);
+    if (!spin) {
+      return false;
+    }
+    *out_param = rclcpp::Parameter(spec_it->name, static_cast<int64_t>(spin->value()));
+    return true;
+  }
+
+  const auto *spin = qobject_cast<const QDoubleSpinBox *>(widget);
+  if (!spin) {
+    return false;
+  }
+  *out_param = rclcpp::Parameter(spec_it->name, spin->value());
+  return true;
+}
+
+bool MainWindow::makeParameterFromDouble(const QString &name, double value,
+                                         rclcpp::Parameter *out_param) const {
+  if (!out_param) {
+    return false;
+  }
+
+  const auto spec_it = param_spec_map_.find(name);
+  if (spec_it == param_spec_map_.end()) {
+    return false;
+  }
+
+  if (spec_it->type == ParamValueType::kInteger) {
+    *out_param = rclcpp::Parameter(spec_it->name, static_cast<int64_t>(std::lround(value)));
+  } else {
+    *out_param = rclcpp::Parameter(spec_it->name, value);
+  }
   return true;
 }
 

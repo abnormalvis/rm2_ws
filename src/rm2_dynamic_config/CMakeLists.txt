@@ -29,6 +29,10 @@ target_include_directories(rm2_dynamic_config_gui PRIVATE
   include
 )
 
+target_compile_definitions(rm2_dynamic_config_gui PRIVATE
+  RM2_DYNAMIC_CONFIG_DEFAULT_SCHEMA="${CMAKE_CURRENT_SOURCE_DIR}/config/gimbal_controller.schema.yaml"
+)
+
 ament_target_dependencies(rm2_dynamic_config_gui
   rclcpp
   rcl_interfaces
@@ -41,6 +45,11 @@ target_link_libraries(rm2_dynamic_config_gui
 
 install(TARGETS rm2_dynamic_config_gui
   DESTINATION lib/${PROJECT_NAME}
+)
+
+install(FILES
+  config/gimbal_controller.schema.yaml
+  DESTINATION share/${PROJECT_NAME}/config
 )
 
 if(BUILD_TESTING)
