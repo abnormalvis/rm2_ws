@@ -4,6 +4,7 @@ log/
 .cache/
 .vscode/
 reference/
+tmp/
 1
 *.md
 !README.md
