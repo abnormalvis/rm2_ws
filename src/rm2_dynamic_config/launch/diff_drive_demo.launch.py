@@ -15,6 +15,7 @@ def generate_launch_description():
     schema_file = package_share / "config" / "diff_drive_controller.schema.yaml"
 
     start_gui = LaunchConfiguration("start_gui")
+    gui_platform = LaunchConfiguration("gui_platform")
     robot_state_publisher = Node(
         package="robot_state_publisher",
         executable="robot_state_publisher",
@@ -51,13 +52,14 @@ def generate_launch_description():
         condition=IfCondition(start_gui),
         additional_env={
             "RM2_DYNAMIC_CONFIG_SCHEMA": str(schema_file),
-            "QT_QPA_PLATFORM": "offscreen",
+            "QT_QPA_PLATFORM": gui_platform,
         },
     )
 
     return LaunchDescription(
         [
             DeclareLaunchArgument("start_gui", default_value="true"),
+            DeclareLaunchArgument("gui_platform", default_value="offscreen"),
             robot_state_publisher,
             controller_manager,
             joint_state_broadcaster,
