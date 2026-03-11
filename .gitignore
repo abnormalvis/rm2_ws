@@ -3,7 +3,8 @@ install/
 log/
 .cache/
 .vscode/
-
+reference/
+1
 *.md
 !README.md
 .clangd
