@@ -150,6 +150,23 @@ QString yamlNodeToEditorText(const YAML::Node &node) {
   return QString::fromStdString(emitter.c_str());
 }
 
+QString envFilePathOverride(const char *name) {
+  const char *value = std::getenv(name);
+  if (value == nullptr || value[0] == '\0') {
+    return {};
+  }
+  return QString::fromLocal8Bit(value).trimmed();
+}
+
+QFileDialog::Options fileDialogOptionsFromEnv() {
+  QFileDialog::Options options;
+  const char *value = std::getenv("RM2_DYNAMIC_CONFIG_USE_NON_NATIVE_DIALOGS");
+  if (value != nullptr && value[0] != '\0' && std::strcmp(value, "0") != 0) {
+    options |= QFileDialog::DontUseNativeDialog;
+  }
+  return options;
+}
+
 YAML::Node parameterToYamlNode(const rclcpp::Parameter &param) {
   YAML::Node node;
   switch (param.get_type()) {
@@ -425,16 +442,21 @@ void MainWindow::onExportYamlClicked() {
     return;
   }
 
-  const QString node_key =
-      QString::fromStdString(normalizeNodeName(connected_target_node_.toStdString()));
-  const QString default_name = QString("%1_params_%2.yaml")
-                                   .arg(node_key.isEmpty() ? "gimbal_controller" : node_key)
-                                   .arg(QDateTime::currentDateTime().toString("yyyyMMdd_HHmmss"));
-  const QString suggested = last_yaml_path_.isEmpty()
-                                ? default_name
-                                : QFileInfo(last_yaml_path_).absolutePath() + "/" + default_name;
-  const QString file_path = QFileDialog::getSaveFileName(
-      this, "Export YAML", suggested, "YAML files (*.yaml *.yml)");
+  QString file_path = envFilePathOverride("RM2_DYNAMIC_CONFIG_EXPORT_PATH");
+  if (file_path.isEmpty()) {
+    const QString node_key =
+        QString::fromStdString(normalizeNodeName(connected_target_node_.toStdString()));
+    const QString default_name = QString("%1_params_%2.yaml")
+                                     .arg(node_key.isEmpty() ? "gimbal_controller" : node_key)
+                                     .arg(QDateTime::currentDateTime().toString("yyyyMMdd_HHmmss"));
+    const QString suggested = last_yaml_path_.isEmpty()
+                                  ? default_name
+                                  : QFileInfo(last_yaml_path_).absolutePath() + "/" + default_name;
+    file_path = QFileDialog::getSaveFileName(
+        this, "Export YAML", suggested, "YAML files (*.yaml *.yml)", nullptr,
+        fileDialogOptionsFromEnv());
+  }
+
   if (file_path.isEmpty()) {
     return;
   }
@@ -454,11 +476,15 @@ void MainWindow::onImportYamlClicked() {
     return;
   }
 
-  const QString start_dir = last_yaml_path_.isEmpty()
-                                ? QString()
-                                : QFileInfo(last_yaml_path_).absolutePath();
-  const QString file_path = QFileDialog::getOpenFileName(
-      this, "Import YAML", start_dir, "YAML files (*.yaml *.yml)");
+  QString file_path = envFilePathOverride("RM2_DYNAMIC_CONFIG_IMPORT_PATH");
+  if (file_path.isEmpty()) {
+    const QString start_dir = last_yaml_path_.isEmpty()
+                                  ? QString()
+                                  : QFileInfo(last_yaml_path_).absolutePath();
+    file_path = QFileDialog::getOpenFileName(
+        this, "Import YAML", start_dir, "YAML files (*.yaml *.yml)", nullptr,
+        fileDialogOptionsFromEnv());
+  }
   if (file_path.isEmpty()) {
     return;
   }
