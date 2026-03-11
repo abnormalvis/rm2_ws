@@ -14,6 +14,7 @@
 #include <QLineEdit>
 #include <QPlainTextEdit>
 #include <QPushButton>
+  #include <QScrollArea>
 #include <QSignalBlocker>
 #include <QSpinBox>
 #include <QTimer>
@@ -276,7 +277,12 @@ void MainWindow::buildUi() {
   param_groups_layout_ = new QVBoxLayout(param_editor_widget);
   param_groups_layout_->setContentsMargins(0, 0, 0, 0);
   param_groups_layout_->setSpacing(8);
-  main_layout->addWidget(param_editor_widget);
+
+  auto *param_scroll_area = new QScrollArea(this);
+  param_scroll_area->setWidgetResizable(true);
+  param_scroll_area->setFrameShape(QFrame::NoFrame);
+  param_scroll_area->setWidget(param_editor_widget);
+  main_layout->addWidget(param_scroll_area, 1);
 
   rebuildParameterEditors();
 
