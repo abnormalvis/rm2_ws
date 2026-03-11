@@ -14,21 +14,35 @@
 class QLabel;
 class QLineEdit;
 class QPushButton;
+class QCheckBox;
 class QDoubleSpinBox;
+class QPlainTextEdit;
 class QSpinBox;
 class QComboBox;
 class QTimer;
 class QVBoxLayout;
 class QWidget;
 
+namespace YAML {
+class Node;
+}
+
 namespace rm2_dynamic_config {
 
-enum class ParamValueType { kDouble, kInteger };
+enum class ParamValueType {
+  kBool,
+  kDouble,
+  kDoubleArray,
+  kInteger,
+  kString,
+  kStringArray,
+};
 
 struct ParamSpec {
   std::string name;
   std::string label;
   std::string group;
+  std::string description;
   ParamValueType type;
   double min;
   double max;
@@ -68,10 +82,11 @@ private:
   void loadDefaultSchema();
   bool loadSchemaFile(const QString &schema_path, QString *error);
   void rebuildParameterEditors();
-  bool setWidgetNumericValue(const QString &name, double value);
+  bool setWidgetParameterValue(const QString &name,
+                               const rclcpp::Parameter &param);
   bool readWidgetParameter(const QString &name, rclcpp::Parameter *out_param) const;
-  bool makeParameterFromDouble(const QString &name, double value,
-                               rclcpp::Parameter *out_param) const;
+  bool makeParameterFromYamlNode(const QString &name, const YAML::Node &value_node,
+                                 rclcpp::Parameter *out_param) const;
   bool exportSnapshot(const QString &file_path);
   bool importSnapshot(const QString &file_path,
                       std::vector<rclcpp::Parameter> *params,

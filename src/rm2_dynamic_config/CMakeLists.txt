@@ -47,9 +47,11 @@ install(TARGETS rm2_dynamic_config_gui
   DESTINATION lib/${PROJECT_NAME}
 )
 
-install(FILES
-  config/gimbal_controller.schema.yaml
-  DESTINATION share/${PROJECT_NAME}/config
+install(DIRECTORY
+  config
+  launch
+  urdf
+  DESTINATION share/${PROJECT_NAME}
 )
 
 if(BUILD_TESTING)

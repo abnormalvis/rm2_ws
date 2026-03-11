@@ -1,0 +1,127 @@
+schema_version: 1
+target_node_default: /diff_drive_controller
+parameters:
+  - name: left_wheel_names
+    label: Left Wheel Names
+    group: Hardware
+    type: string_array
+    description: Names of the left side wheel joints.
+  - name: right_wheel_names
+    label: Right Wheel Names
+    group: Hardware
+    type: string_array
+    description: Names of the right side wheel joints.
+  - name: wheel_separation
+    label: Wheel Separation
+    group: Kinematics
+    type: double
+    min: 0.01
+    max: 2.0
+    step: 0.01
+    decimals: 3
+    description: Distance between left and right wheels in meters.
+  - name: wheel_radius
+    label: Wheel Radius
+    group: Kinematics
+    type: double
+    min: 0.001
+    max: 0.5
+    step: 0.001
+    decimals: 4
+    description: Wheel radius used for linear/angular conversion.
+  - name: wheel_separation_multiplier
+    label: Wheel Separation Multiplier
+    group: Calibration
+    type: double
+    min: 0.5
+    max: 2.0
+    step: 0.01
+    decimals: 3
+    description: Correction factor when the nominal wheel separation differs from the real robot.
+  - name: left_wheel_radius_multiplier
+    label: Left Wheel Radius Multiplier
+    group: Calibration
+    type: double
+    min: 0.5
+    max: 2.0
+    step: 0.01
+    decimals: 3
+  - name: right_wheel_radius_multiplier
+    label: Right Wheel Radius Multiplier
+    group: Calibration
+    type: double
+    min: 0.5
+    max: 2.0
+    step: 0.01
+    decimals: 3
+  - name: open_loop
+    label: Open Loop
+    group: Runtime
+    type: bool
+    description: Use commanded velocity for odometry instead of feedback.
+  - name: position_feedback
+    label: Position Feedback
+    group: Runtime
+    type: bool
+    description: Read position feedback instead of velocity feedback.
+  - name: enable_odom_tf
+    label: Publish Odom TF
+    group: Runtime
+    type: bool
+    description: Publish odom to base_link transform.
+  - name: publish_limited_velocity
+    label: Publish Limited Velocity
+    group: Runtime
+    type: bool
+    description: Publish limited velocity output.
+  - name: tf_frame_prefix_enable
+    label: Use TF Prefix
+    group: Frames
+    type: bool
+  - name: tf_frame_prefix
+    label: TF Prefix
+    group: Frames
+    type: string
+  - name: odom_frame_id
+    label: Odom Frame
+    group: Frames
+    type: string
+    description: Parent frame for odometry.
+  - name: base_frame_id
+    label: Base Frame
+    group: Frames
+    type: string
+    description: Child base frame used for odometry.
+  - name: cmd_vel_timeout
+    label: Cmd Vel Timeout
+    group: Runtime
+    type: double
+    min: 0.0
+    max: 5.0
+    step: 0.05
+    decimals: 2
+  - name: velocity_rolling_window_size
+    label: Velocity Rolling Window
+    group: Runtime
+    type: int
+    min: 1
+    max: 100
+    step: 1
+  - name: publish_rate
+    label: Publish Rate
+    group: Runtime
+    type: double
+    min: 1.0
+    max: 200.0
+    step: 1.0
+    decimals: 1
+  - name: pose_covariance_diagonal
+    label: Pose Covariance Diagonal
+    group: Covariance
+    type: double_array
+    description: YAML list of six covariance diagonal entries.
+  - name: twist_covariance_diagonal
+    label: Twist Covariance Diagonal
+    group: Covariance
+    type: double_array
+    description: YAML list of six covariance diagonal entries.

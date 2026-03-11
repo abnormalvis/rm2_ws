@@ -1,6 +1,7 @@
 #include "rm2_dynamic_config/main_window.hpp"
 
 #include <QComboBox>
+#include <QCheckBox>
 #include <QDateTime>
 #include <QDoubleSpinBox>
 #include <QFileDialog>
@@ -11,6 +12,7 @@
 #include <QLabel>
 #include <QLayout>
 #include <QLineEdit>
+#include <QPlainTextEdit>
 #include <QPushButton>
 #include <QSignalBlocker>
 #include <QSpinBox>
@@ -63,8 +65,44 @@ bool parseScalarDouble(const YAML::Node &node, double *value) {
   }
 }
 
+bool parseScalarBool(const YAML::Node &node, bool *value) {
+  if (!node.IsScalar()) {
+    return false;
+  }
+  try {
+    *value = node.as<bool>();
+    return true;
+  } catch (const YAML::Exception &) {
+    return false;
+  }
+}
+
+bool parseScalarInteger(const YAML::Node &node, int64_t *value) {
+  if (!node.IsScalar()) {
+    return false;
+  }
+  try {
+    *value = node.as<int64_t>();
+    return true;
+  } catch (const YAML::Exception &) {
+    return false;
+  }
+}
+
+bool parseScalarString(const YAML::Node &node, std::string *value) {
+  if (!node.IsScalar()) {
+    return false;
+  }
+  try {
+    *value = node.as<std::string>();
+    return true;
+  } catch (const YAML::Exception &) {
+    return false;
+  }
+}
+
 void flattenRosParameters(const YAML::Node &node, const std::string &prefix,
-                          std::unordered_map<std::string, double> *out) {
+                          std::unordered_map<std::string, YAML::Node> *out) {
   if (!node || !node.IsMap()) {
     return;
   }
@@ -82,18 +120,66 @@ void flattenRosParameters(const YAML::Node &node, const std::string &prefix,
       continue;
     }
 
-    double value = 0.0;
-    if (parseScalarDouble(value_node, &value)) {
-      (*out)[full_key] = value;
-    }
+    (*out)[full_key] = value_node;
   }
 }
 
 ParamValueType parseParamType(const std::string &type_str) {
+  if (type_str == "bool" || type_str == "boolean") {
+    return ParamValueType::kBool;
+  }
   if (type_str == "int" || type_str == "integer") {
     return ParamValueType::kInteger;
   }
+  if (type_str == "string") {
+    return ParamValueType::kString;
+  }
+  if (type_str == "string_array") {
+    return ParamValueType::kStringArray;
+  }
+  if (type_str == "double_array") {
+    return ParamValueType::kDoubleArray;
+  }
   return ParamValueType::kDouble;
+}
+
+QString yamlNodeToEditorText(const YAML::Node &node) {
+  YAML::Emitter emitter;
+  emitter << node;
+  return QString::fromStdString(emitter.c_str());
+}
+
+YAML::Node parameterToYamlNode(const rclcpp::Parameter &param) {
+  YAML::Node node;
+  switch (param.get_type()) {
+    case rclcpp::ParameterType::PARAMETER_BOOL:
+      node = param.as_bool();
+      break;
+    case rclcpp::ParameterType::PARAMETER_INTEGER:
+      node = param.as_int();
+      break;
+    case rclcpp::ParameterType::PARAMETER_DOUBLE:
+      node = param.as_double();
+      break;
+    case rclcpp::ParameterType::PARAMETER_STRING:
+      node = param.as_string();
+      break;
+    case rclcpp::ParameterType::PARAMETER_STRING_ARRAY: {
+      for (const auto &value : param.as_string_array()) {
+        node.push_back(value);
+      }
+      break;
+    }
+    case rclcpp::ParameterType::PARAMETER_DOUBLE_ARRAY: {
+      for (double value : param.as_double_array()) {
+        node.push_back(value);
+      }
+      break;
+    }
+    default:
+      break;
+  }
+  return node;
 }
 
 void clearLayout(QLayout *layout) {
@@ -449,12 +535,7 @@ void MainWindow::onParameterInputChanged(const QString &name) {
 void MainWindow::updateWidgets(const std::vector<rclcpp::Parameter> &params) {
   updating_widgets_ = true;
   for (const auto &param : params) {
-    const QString key = QString::fromStdString(param.get_name());
-    if (param.get_type() == rclcpp::ParameterType::PARAMETER_DOUBLE) {
-      setWidgetNumericValue(key, param.as_double());
-    } else if (param.get_type() == rclcpp::ParameterType::PARAMETER_INTEGER) {
-      setWidgetNumericValue(key, static_cast<double>(param.as_int()));
-    }
+    setWidgetParameterValue(QString::fromStdString(param.get_name()), param);
   }
   updating_widgets_ = false;
 }
@@ -492,18 +573,35 @@ void MainWindow::handleParameterEvents(
       return;
     }
 
-    double value = 0.0;
-    if (parameter.value.type == rcl_interfaces::msg::ParameterType::PARAMETER_DOUBLE) {
-      value = parameter.value.double_value;
-    } else if (parameter.value.type ==
-               rcl_interfaces::msg::ParameterType::PARAMETER_INTEGER) {
-      value = static_cast<double>(parameter.value.integer_value);
-    } else {
-      return;
+    rclcpp::Parameter converted;
+    switch (parameter.value.type) {
+      case rcl_interfaces::msg::ParameterType::PARAMETER_BOOL:
+        converted = rclcpp::Parameter(parameter.name, parameter.value.bool_value);
+        break;
+      case rcl_interfaces::msg::ParameterType::PARAMETER_INTEGER:
+        converted = rclcpp::Parameter(parameter.name, parameter.value.integer_value);
+        break;
+      case rcl_interfaces::msg::ParameterType::PARAMETER_DOUBLE:
+        converted = rclcpp::Parameter(parameter.name, parameter.value.double_value);
+        break;
+      case rcl_interfaces::msg::ParameterType::PARAMETER_STRING:
+        converted = rclcpp::Parameter(parameter.name, parameter.value.string_value);
+        break;
+      case rcl_interfaces::msg::ParameterType::PARAMETER_STRING_ARRAY:
+        converted = rclcpp::Parameter(parameter.name, parameter.value.string_array_value);
+        break;
+      case rcl_interfaces::msg::ParameterType::PARAMETER_DOUBLE_ARRAY:
+        converted = rclcpp::Parameter(parameter.name, parameter.value.double_array_value);
+        break;
+      default:
+        return;
     }
 
     updating_widgets_ = true;
-    setWidgetNumericValue(key, value);
+    if (!setWidgetParameterValue(key, converted)) {
+      updating_widgets_ = false;
+      return;
+    }
     updating_widgets_ = false;
     dirty_params_.remove(key);
     immediate_pending_params_.remove(key);
@@ -561,11 +659,7 @@ bool MainWindow::exportSnapshot(const QString &file_path) {
       continue;
     }
 
-    if (param.get_type() == rclcpp::ParameterType::PARAMETER_INTEGER) {
-      params_node[spec.name] = param.as_int();
-    } else {
-      params_node[spec.name] = param.as_double();
-    }
+    params_node[spec.name] = parameterToYamlNode(param);
   }
   snapshot["parameters"] = params_node;
   root["snapshot"] = snapshot;
@@ -603,7 +697,7 @@ bool MainWindow::importSnapshot(const QString &file_path,
     return false;
   }
 
-  std::unordered_map<std::string, double> imported;
+  std::unordered_map<std::string, YAML::Node> imported;
   bool parsed = false;
 
   const YAML::Node snapshot_node = root["snapshot"];
@@ -613,11 +707,7 @@ bool MainWindow::importSnapshot(const QString &file_path,
       if (!entry.first.IsScalar()) {
         continue;
       }
-      double value = 0.0;
-      if (!parseScalarDouble(entry.second, &value)) {
-        continue;
-      }
-      imported[entry.first.as<std::string>()] = value;
+      imported[entry.first.as<std::string>()] = entry.second;
     }
     parsed = true;
   }
@@ -628,11 +718,7 @@ bool MainWindow::importSnapshot(const QString &file_path,
       if (!entry.first.IsScalar()) {
         continue;
       }
-      double value = 0.0;
-      if (!parseScalarDouble(entry.second, &value)) {
-        continue;
-      }
-      imported[entry.first.as<std::string>()] = value;
+      imported[entry.first.as<std::string>()] = entry.second;
     }
     parsed = true;
   }
@@ -656,7 +742,7 @@ bool MainWindow::importSnapshot(const QString &file_path,
     }
 
     rclcpp::Parameter param;
-    if (!makeParameterFromDouble(key, item.second, &param)) {
+    if (!makeParameterFromYamlNode(key, item.second, &param)) {
       continue;
     }
     params->push_back(param);
@@ -710,28 +796,28 @@ bool MainWindow::applyParameters(const std::vector<rclcpp::Parameter> &params,
 void MainWindow::loadDefaultSchema() {
   schema_target_node_default_ = kFallbackTargetNode;
   param_specs_ = {
-      {"publish_rate", "publish_rate", "Controller", ParamValueType::kInteger,
+      {"publish_rate", "publish_rate", "Controller", "", ParamValueType::kInteger,
        1.0, 500.0, 1.0, 0},
-      {"yaw_k_v", "yaw_k_v", "Velocity", ParamValueType::kDouble,
+      {"yaw_k_v", "yaw_k_v", "Velocity", "", ParamValueType::kDouble,
        -20.0, 20.0, 0.01, 3},
-      {"pitch_k_v", "pitch_k_v", "Velocity", ParamValueType::kDouble,
+      {"pitch_k_v", "pitch_k_v", "Velocity", "", ParamValueType::kDouble,
        -20.0, 20.0, 0.01, 3},
-      {"chassis_compensation.a", "chassis_compensation.a", "Compensation",
+      {"chassis_compensation.a", "chassis_compensation.a", "Compensation", "",
        ParamValueType::kDouble, -20.0, 20.0, 0.01, 3},
-      {"chassis_compensation.b", "chassis_compensation.b", "Compensation",
+      {"chassis_compensation.b", "chassis_compensation.b", "Compensation", "",
        ParamValueType::kDouble, -50.0, 50.0, 0.01, 3},
-      {"chassis_compensation.c", "chassis_compensation.c", "Compensation",
+      {"chassis_compensation.c", "chassis_compensation.c", "Compensation", "",
        ParamValueType::kDouble, -20.0, 20.0, 0.01, 3},
-      {"chassis_compensation.d", "chassis_compensation.d", "Compensation",
+      {"chassis_compensation.d", "chassis_compensation.d", "Compensation", "",
        ParamValueType::kDouble, -20.0, 20.0, 0.01, 3},
-      {"chassis_vel.cutoff_frequency", "chassis_vel.cutoff_frequency", "Compensation",
+      {"chassis_vel.cutoff_frequency", "chassis_vel.cutoff_frequency", "Compensation", "",
        ParamValueType::kDouble, 0.1, 200.0, 0.1, 2},
-      {"yaw.k_chassis_vel", "yaw.k_chassis_vel", "Yaw", ParamValueType::kDouble,
+      {"yaw.k_chassis_vel", "yaw.k_chassis_vel", "Yaw", "", ParamValueType::kDouble,
        -20.0, 20.0, 0.01, 3},
       {"yaw.resistance_compensation.resistance", "yaw.resistance_compensation.resistance",
-       "Yaw", ParamValueType::kDouble, -20.0, 20.0, 0.01, 3},
+       "Yaw", "", ParamValueType::kDouble, -20.0, 20.0, 0.01, 3},
       {"yaw.resistance_compensation.error_tolerance",
-       "yaw.resistance_compensation.error_tolerance", "Yaw", ParamValueType::kDouble,
+       "yaw.resistance_compensation.error_tolerance", "Yaw", "", ParamValueType::kDouble,
        0.0, 10.0, 0.01, 3},
   };
 
@@ -778,11 +864,16 @@ bool MainWindow::loadSchemaFile(const QString &schema_path, QString *error) {
     spec.group = entry["group"] && entry["group"].IsScalar()
                      ? entry["group"].as<std::string>()
                      : "General";
+    spec.description = entry["description"] && entry["description"].IsScalar()
+                           ? entry["description"].as<std::string>()
+                           : "";
     spec.type = entry["type"] && entry["type"].IsScalar()
                     ? parseParamType(entry["type"].as<std::string>())
                     : ParamValueType::kDouble;
 
     const bool is_integer = spec.type == ParamValueType::kInteger;
+    const bool is_numeric =
+        spec.type == ParamValueType::kInteger || spec.type == ParamValueType::kDouble;
     spec.min = entry["min"] && entry["min"].IsScalar()
                    ? entry["min"].as<double>()
                    : (is_integer ? -1000.0 : -100.0);
@@ -796,10 +887,10 @@ bool MainWindow::loadSchemaFile(const QString &schema_path, QString *error) {
                         ? entry["decimals"].as<int>()
                         : (is_integer ? 0 : 3);
 
-    if (spec.max < spec.min) {
+    if (is_numeric && spec.max < spec.min) {
       std::swap(spec.min, spec.max);
     }
-    if (spec.step <= 0.0) {
+    if (is_numeric && spec.step <= 0.0) {
       spec.step = is_integer ? 1.0 : 0.01;
     }
     if (spec.decimals < 0) {
@@ -855,9 +946,16 @@ void MainWindow::rebuildParameterEditors() {
 
     const QString key = QString::fromStdString(spec.name);
     const QString label = QString::fromStdString(spec.label);
+    const QString description = QString::fromStdString(spec.description);
     QWidget *input = nullptr;
 
-    if (spec.type == ParamValueType::kInteger) {
+    if (spec.type == ParamValueType::kBool) {
+      auto *checkbox = new QCheckBox(this);
+      checkbox->setEnabled(false);
+      connect(checkbox, &QCheckBox::toggled, this,
+              [this, key](bool) { onParameterInputChanged(key); });
+      input = checkbox;
+    } else if (spec.type == ParamValueType::kInteger) {
       auto *spin = new QSpinBox(this);
       spin->setRange(static_cast<int>(std::lround(spec.min)),
                      static_cast<int>(std::lround(spec.max)));
@@ -866,6 +964,23 @@ void MainWindow::rebuildParameterEditors() {
       connect(spin, qOverload<int>(&QSpinBox::valueChanged), this,
               [this, key](int) { onParameterInputChanged(key); });
       input = spin;
+                } else if (spec.type == ParamValueType::kString) {
+                  auto *line_edit = new QLineEdit(this);
+                  line_edit->setEnabled(false);
+                  connect(line_edit, &QLineEdit::textChanged, this,
+                    [this, key](const QString &) { onParameterInputChanged(key); });
+                  input = line_edit;
+                } else if (spec.type == ParamValueType::kStringArray ||
+                     spec.type == ParamValueType::kDoubleArray) {
+                  auto *text_edit = new QPlainTextEdit(this);
+                  text_edit->setEnabled(false);
+                  text_edit->setMinimumHeight(72);
+                  text_edit->setPlaceholderText(spec.type == ParamValueType::kStringArray
+                      ? "YAML sequence or [item1, item2]"
+                      : "YAML numeric sequence, e.g. [0.0, 0.0]");
+                  connect(text_edit, &QPlainTextEdit::textChanged, this,
+                    [this, key]() { onParameterInputChanged(key); });
+                  input = text_edit;
     } else {
       auto *spin = new QDoubleSpinBox(this);
       spin->setRange(spec.min, spec.max);
@@ -877,14 +992,20 @@ void MainWindow::rebuildParameterEditors() {
       input = spin;
     }
 
-    form->addRow(label, input);
+    auto *label_widget = new QLabel(label, this);
+    if (!description.isEmpty()) {
+      label_widget->setToolTip(description);
+      input->setToolTip(description);
+    }
+    form->addRow(label_widget, input);
     param_inputs_.insert(key, input);
   }
 
   param_groups_layout_->addStretch(1);
 }
 
-bool MainWindow::setWidgetNumericValue(const QString &name, double value) {
+bool MainWindow::setWidgetParameterValue(const QString &name,
+                                         const rclcpp::Parameter &param) {
   const auto spec_it = param_spec_map_.find(name);
   if (spec_it == param_spec_map_.end()) {
     return false;
@@ -896,20 +1017,55 @@ bool MainWindow::setWidgetNumericValue(const QString &name, double value) {
   }
 
   QSignalBlocker blocker(widget);
-  if (spec_it->type == ParamValueType::kInteger) {
-    auto *spin = qobject_cast<QSpinBox *>(widget);
-    if (!spin) {
+  if (spec_it->type == ParamValueType::kBool) {
+    auto *checkbox = qobject_cast<QCheckBox *>(widget);
+    if (!checkbox || param.get_type() != rclcpp::ParameterType::PARAMETER_BOOL) {
       return false;
     }
-    spin->setValue(static_cast<int>(std::lround(value)));
+    checkbox->setChecked(param.as_bool());
+    return true;
+  }
+  if (spec_it->type == ParamValueType::kInteger) {
+    auto *spin = qobject_cast<QSpinBox *>(widget);
+    if (!spin || param.get_type() != rclcpp::ParameterType::PARAMETER_INTEGER) {
+      return false;
+    }
+    spin->setValue(static_cast<int>(param.as_int()));
+    return true;
+  }
+
+  if (spec_it->type == ParamValueType::kString) {
+    auto *line_edit = qobject_cast<QLineEdit *>(widget);
+    if (!line_edit || param.get_type() != rclcpp::ParameterType::PARAMETER_STRING) {
+      return false;
+    }
+    line_edit->setText(QString::fromStdString(param.as_string()));
+    return true;
+  }
+
+  if (spec_it->type == ParamValueType::kStringArray) {
+    auto *text_edit = qobject_cast<QPlainTextEdit *>(widget);
+    if (!text_edit || param.get_type() != rclcpp::ParameterType::PARAMETER_STRING_ARRAY) {
+      return false;
+    }
+    text_edit->setPlainText(yamlNodeToEditorText(parameterToYamlNode(param)));
+    return true;
+  }
+
+  if (spec_it->type == ParamValueType::kDoubleArray) {
+    auto *text_edit = qobject_cast<QPlainTextEdit *>(widget);
+    if (!text_edit || param.get_type() != rclcpp::ParameterType::PARAMETER_DOUBLE_ARRAY) {
+      return false;
+    }
+    text_edit->setPlainText(yamlNodeToEditorText(parameterToYamlNode(param)));
     return true;
   }
 
   auto *spin = qobject_cast<QDoubleSpinBox *>(widget);
-  if (!spin) {
+  if (!spin || param.get_type() != rclcpp::ParameterType::PARAMETER_DOUBLE) {
     return false;
   }
-  spin->setValue(value);
+  spin->setValue(param.as_double());
   return true;
 }
 
@@ -929,6 +1085,15 @@ bool MainWindow::readWidgetParameter(const QString &name,
     return false;
   }
 
+  if (spec_it->type == ParamValueType::kBool) {
+    const auto *checkbox = qobject_cast<const QCheckBox *>(widget);
+    if (!checkbox) {
+      return false;
+    }
+    *out_param = rclcpp::Parameter(spec_it->name, checkbox->isChecked());
+    return true;
+  }
+
   if (spec_it->type == ParamValueType::kInteger) {
     const auto *spin = qobject_cast<const QSpinBox *>(widget);
     if (!spin) {
@@ -936,6 +1101,36 @@ bool MainWindow::readWidgetParameter(const QString &name,
     }
     *out_param = rclcpp::Parameter(spec_it->name, static_cast<int64_t>(spin->value()));
     return true;
+  }
+
+  if (spec_it->type == ParamValueType::kString) {
+    const auto *line_edit = qobject_cast<const QLineEdit *>(widget);
+    if (!line_edit) {
+      return false;
+    }
+    *out_param = rclcpp::Parameter(spec_it->name, line_edit->text().toStdString());
+    return true;
+  }
+
+  if (spec_it->type == ParamValueType::kStringArray ||
+      spec_it->type == ParamValueType::kDoubleArray) {
+    const auto *text_edit = qobject_cast<const QPlainTextEdit *>(widget);
+    if (!text_edit) {
+      return false;
+    }
+
+    const QString text = text_edit->toPlainText().trimmed();
+    YAML::Node value_node;
+    if (text.isEmpty()) {
+      value_node = YAML::Node(YAML::NodeType::Sequence);
+    } else {
+      try {
+        value_node = YAML::Load(text.toStdString());
+      } catch (const YAML::Exception &) {
+        return false;
+      }
+    }
+    return makeParameterFromYamlNode(name, value_node, out_param);
   }
 
   const auto *spin = qobject_cast<const QDoubleSpinBox *>(widget);
@@ -946,8 +1141,9 @@ bool MainWindow::readWidgetParameter(const QString &name,
   return true;
 }
 
-bool MainWindow::makeParameterFromDouble(const QString &name, double value,
-                                         rclcpp::Parameter *out_param) const {
+bool MainWindow::makeParameterFromYamlNode(const QString &name,
+                                           const YAML::Node &value_node,
+                                           rclcpp::Parameter *out_param) const {
   if (!out_param) {
     return false;
   }
@@ -957,12 +1153,96 @@ bool MainWindow::makeParameterFromDouble(const QString &name, double value,
     return false;
   }
 
-  if (spec_it->type == ParamValueType::kInteger) {
-    *out_param = rclcpp::Parameter(spec_it->name, static_cast<int64_t>(std::lround(value)));
-  } else {
-    *out_param = rclcpp::Parameter(spec_it->name, value);
+  switch (spec_it->type) {
+    case ParamValueType::kBool: {
+      bool value = false;
+      if (!parseScalarBool(value_node, &value)) {
+        return false;
+      }
+      *out_param = rclcpp::Parameter(spec_it->name, value);
+      return true;
+    }
+    case ParamValueType::kInteger: {
+      int64_t value = 0;
+      if (parseScalarInteger(value_node, &value)) {
+        *out_param = rclcpp::Parameter(spec_it->name, value);
+        return true;
+      }
+      double double_value = 0.0;
+      if (!parseScalarDouble(value_node, &double_value)) {
+        return false;
+      }
+      *out_param =
+          rclcpp::Parameter(spec_it->name, static_cast<int64_t>(std::lround(double_value)));
+      return true;
+    }
+    case ParamValueType::kDouble: {
+      double value = 0.0;
+      if (!parseScalarDouble(value_node, &value)) {
+        return false;
+      }
+      *out_param = rclcpp::Parameter(spec_it->name, value);
+      return true;
+    }
+    case ParamValueType::kString: {
+      std::string value;
+      if (!parseScalarString(value_node, &value)) {
+        return false;
+      }
+      *out_param = rclcpp::Parameter(spec_it->name, value);
+      return true;
+    }
+    case ParamValueType::kStringArray: {
+      if (!value_node.IsSequence()) {
+        if (value_node.IsScalar()) {
+          std::string value;
+          if (!parseScalarString(value_node, &value)) {
+            return false;
+          }
+          *out_param = rclcpp::Parameter(spec_it->name, std::vector<std::string>{value});
+          return true;
+        }
+        return false;
+      }
+      std::vector<std::string> values;
+      values.reserve(value_node.size());
+      for (const auto &entry : value_node) {
+        std::string value;
+        if (!parseScalarString(entry, &value)) {
+          return false;
+        }
+        values.push_back(value);
+      }
+      *out_param = rclcpp::Parameter(spec_it->name, values);
+      return true;
+    }
+    case ParamValueType::kDoubleArray: {
+      if (!value_node.IsSequence()) {
+        if (value_node.IsScalar()) {
+          double value = 0.0;
+          if (!parseScalarDouble(value_node, &value)) {
+            return false;
+          }
+          *out_param = rclcpp::Parameter(spec_it->name, std::vector<double>{value});
+          return true;
+        }
+        return false;
+      }
+      std::vector<double> values;
+      values.reserve(value_node.size());
+      for (const auto &entry : value_node) {
+        double value = 0.0;
+        if (!parseScalarDouble(entry, &value)) {
+          return false;
+        }
+        values.push_back(value);
+      }
+      *out_param = rclcpp::Parameter(spec_it->name, values);
+      return true;
+    }
   }
-  return true;
+
+  return false;
 }
 
 MainWindow::SubmitMode MainWindow::currentSubmitMode() const {
