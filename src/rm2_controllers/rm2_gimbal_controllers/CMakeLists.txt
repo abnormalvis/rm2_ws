@@ -89,6 +89,12 @@ install(DIRECTORY include/
     DESTINATION include
 )
 
+install(DIRECTORY
+  config
+  launch
+  DESTINATION share/${PROJECT_NAME}
+)
+
 pluginlib_export_plugin_description_file(controller_interface rm2_gimbal_controllers_plugins.xml)
 
 ament_package()

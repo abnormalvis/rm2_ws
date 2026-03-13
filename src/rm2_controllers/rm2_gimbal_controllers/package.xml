@@ -28,6 +28,12 @@
   <depend>control_msgs</depend>
   <depend>geometry_msgs</depend>
   <depend>pal_statistics</depend>
+  <exec_depend>ament_index_python</exec_depend>
+  <exec_depend>launch</exec_depend>
+  <exec_depend>launch_ros</exec_depend>
+  <exec_depend>rm2_dynamic_config</exec_depend>
+  <exec_depend>ros2param</exec_depend>
+  <exec_depend>ros2topic</exec_depend>
   
   <exec_depend>rqt_reconfigure</exec_depend>
 
