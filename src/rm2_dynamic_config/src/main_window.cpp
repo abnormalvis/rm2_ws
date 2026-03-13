@@ -246,6 +246,21 @@ MainWindow::MainWindow(QWidget *parent)
     }
   }
 
+  if (const char *env_target_node = std::getenv("RM2_DYNAMIC_CONFIG_TARGET_NODE");
+      env_target_node != nullptr && std::strlen(env_target_node) > 0) {
+    const QString target_override = QString::fromLocal8Bit(env_target_node).trimmed();
+    if (!target_override.isEmpty()) {
+      schema_target_node_default_ = target_override;
+      if (schema_load_result.isEmpty()) {
+        schema_load_result =
+            QString("Target override: %1").arg(schema_target_node_default_);
+      } else {
+        schema_load_result +=
+            QString(" | Target override: %1").arg(schema_target_node_default_);
+      }
+    }
+  }
+
   buildUi();
   if (!schema_load_result.isEmpty()) {
     setStatus(schema_load_result);

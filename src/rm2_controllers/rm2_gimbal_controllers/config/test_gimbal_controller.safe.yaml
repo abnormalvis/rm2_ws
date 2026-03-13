@@ -1,0 +1,89 @@
+test_gimbal_controller:
+  ros__parameters:
+    yaw:
+      joint: yaw_motor
+      pid:
+        p: 0.2
+        i: 2.0
+        d: 0.0
+        i_max: 1.0
+        i_min: -1.0
+      pid_pos:
+        p: 1.5
+        i: 0.0
+        d: 0.0
+        i_max: 0.5
+        i_min: -0.5
+      limits:
+        max_position: 3.14159
+        min_position: -3.14159
+        max_velocity: 6.0
+        max_effort: 15.0
+      parent_link: base_link
+      resistance_compensation:
+        resistance: 1.0
+        error_tolerance: 0.05
+      k_chassis_vel: 0.0
+
+    pitch:
+      joint: pitch_motor
+      pid:
+        p: 0.15
+        i: 1.5
+        d: 0.0
+        i_max: 0.8
+        i_min: -0.8
+      pid_pos:
+        p: 1.2
+        i: 0.0
+        d: 0.0
+        i_max: 0.4
+        i_min: -0.4
+      limits:
+        max_position: 1.5708
+        min_position: -1.5708
+        max_velocity: 4.0
+        max_effort: 12.0
+      parent_link: base_link
+
+    feedforward:
+      enable: false
+      mass_origin:
+        x: 0.1
+        z: 0.05
+      gravity: 9.8
+
+    yaw_k_v: 0.0
+    pitch_k_v: 0.0
+
+    chassis_compensation:
+      a: 0.0
+      b: 1.0
+      c: 0.0
+      d: 0.0
+
+    accel_pitch: [0.0]
+    accel_yaw: [0.0]
+
+    chassis_vel:
+      cutoff_frequency: 10.0
+
+    bullet_solver:
+      resistance_coff: 0.001
+      resistance_coff_qd_10: 0.0008
+      resistance_coff_qd_15: 0.0009
+      resistance_coff_qd_16: 0.00095
+      resistance_coff_qd_18: 0.001
+      resistance_coff_qd_30: 0.0015
+      g: 9.8
+      max_iter: 20
+
+    imu_name: ""
+    imu_frame_id: imu_link
+    publish_rate: 50.0
+
+test_effort_controller:
+  ros__parameters:
+    joints:
+      - yaw_motor
+      - pitch_motor
