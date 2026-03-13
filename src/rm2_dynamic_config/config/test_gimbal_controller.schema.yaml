@@ -1,0 +1,90 @@
+schema_version: 1
+target_node_default: /test_gimbal_controller
+parameters:
+  - name: publish_rate
+    label: Publish Rate
+    group: Controller
+    type: int
+    min: 1
+    max: 500
+    step: 1
+  - name: yaw_k_v
+    label: Yaw K_v
+    group: Velocity
+    type: double
+    min: -20.0
+    max: 20.0
+    step: 0.01
+    decimals: 3
+  - name: pitch_k_v
+    label: Pitch K_v
+    group: Velocity
+    type: double
+    min: -20.0
+    max: 20.0
+    step: 0.01
+    decimals: 3
+  - name: chassis_compensation.a
+    label: Chassis Comp A
+    group: Compensation
+    type: double
+    min: -20.0
+    max: 20.0
+    step: 0.01
+    decimals: 3
+  - name: chassis_compensation.b
+    label: Chassis Comp B
+    group: Compensation
+    type: double
+    min: -50.0
+    max: 50.0
+    step: 0.01
+    decimals: 3
+  - name: chassis_compensation.c
+    label: Chassis Comp C
+    group: Compensation
+    type: double
+    min: -20.0
+    max: 20.0
+    step: 0.01
+    decimals: 3
+  - name: chassis_compensation.d
+    label: Chassis Comp D
+    group: Compensation
+    type: double
+    min: -20.0
+    max: 20.0
+    step: 0.01
+    decimals: 3
+  - name: chassis_vel.cutoff_frequency
+    label: Chassis Vel Cutoff
+    group: Compensation
+    type: double
+    min: 0.1
+    max: 200.0
+    step: 0.1
+    decimals: 2
+  - name: yaw.k_chassis_vel
+    label: Yaw K Chassis Vel
+    group: Yaw
+    type: double
+    min: -20.0
+    max: 20.0
+    step: 0.01
+    decimals: 3
+  - name: yaw.resistance_compensation.resistance
+    label: Yaw Resistance
+    group: Yaw
+    type: double
+    min: -20.0
+    max: 20.0
+    step: 0.01
+    decimals: 3
+  - name: yaw.resistance_compensation.error_tolerance
+    label: Yaw Error Tolerance
+    group: Yaw
+    type: double
+    min: 0.0
+    max: 10.0
+    step: 0.01
+    decimals: 3

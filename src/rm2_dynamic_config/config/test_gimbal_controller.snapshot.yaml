@@ -1,0 +1,16 @@
+snapshot:
+  metadata:
+    target_node: /test_gimbal_controller
+    profile: safe
+  parameters:
+    publish_rate: 50
+    yaw_k_v: 0.0
+    pitch_k_v: 0.0
+    chassis_compensation.a: 0.0
+    chassis_compensation.b: 1.0
+    chassis_compensation.c: 0.0
+    chassis_compensation.d: 0.0
+    chassis_vel.cutoff_frequency: 10.0
+    yaw.k_chassis_vel: 0.0
+    yaw.resistance_compensation.resistance: 1.0
+    yaw.resistance_compensation.error_tolerance: 0.05
