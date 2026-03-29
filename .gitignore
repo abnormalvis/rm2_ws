@@ -11,6 +11,7 @@ src/ros2_controllers/
 1
 *.md
 !README.md
+!docs/**/*.md
 .clangd
 
 # Exclude reference repositories
