@@ -1,0 +1,267 @@
+gimbal_controller:
+  yaw:
+    joint:
+      type: string
+      default_value: ""
+      description: "Yaw joint name"
+    pid:
+      p:
+        type: double
+        default_value: 0.0
+        description: "Yaw velocity PID proportional gain"
+      i:
+        type: double
+        default_value: 0.0
+        description: "Yaw velocity PID integral gain"
+      d:
+        type: double
+        default_value: 0.0
+        description: "Yaw velocity PID derivative gain"
+      i_clamp_max:
+        type: double
+        default_value: 0.0
+        description: "Yaw velocity PID upper integral clamp"
+      i_clamp_min:
+        type: double
+        default_value: 0.0
+        description: "Yaw velocity PID lower integral clamp"
+    pid_pos:
+      p:
+        type: double
+        default_value: 0.0
+        description: "Yaw position PID proportional gain"
+      i:
+        type: double
+        default_value: 0.0
+        description: "Yaw position PID integral gain"
+      d:
+        type: double
+        default_value: 0.0
+        description: "Yaw position PID derivative gain"
+      i_clamp_max:
+        type: double
+        default_value: 0.0
+        description: "Yaw position PID upper integral clamp"
+      i_clamp_min:
+        type: double
+        default_value: 0.0
+        description: "Yaw position PID lower integral clamp"
+    limits:
+      max_position:
+        type: double
+        default_value: 0.0
+        description: "Yaw joint upper position limit (rad)"
+      min_position:
+        type: double
+        default_value: 0.0
+        description: "Yaw joint lower position limit (rad)"
+      max_velocity:
+        type: double
+        default_value: 0.0
+        description: "Yaw joint velocity limit (rad/s)"
+      max_effort:
+        type: double
+        default_value: 0.0
+        description: "Yaw joint effort limit"
+    parent_link:
+      type: string
+      default_value: ""
+      description: "Parent link of yaw joint"
+    resistance_compensation:
+      resistance:
+        type: double
+        default_value: 0.0
+        description: "Yaw friction resistance compensation coefficient"
+      error_tolerance:
+        type: double
+        default_value: 0.0
+        description: "Yaw resistance compensation velocity error tolerance"
+    k_chassis_vel:
+      type: double
+      default_value: 0.0
+      description: "Yaw chassis angular velocity feedforward coefficient"
+
+  pitch:
+    joint:
+      type: string
+      default_value: ""
+      description: "Pitch joint name"
+    pid:
+      p:
+        type: double
+        default_value: 0.0
+        description: "Pitch velocity PID proportional gain"
+      i:
+        type: double
+        default_value: 0.0
+        description: "Pitch velocity PID integral gain"
+      d:
+        type: double
+        default_value: 0.0
+        description: "Pitch velocity PID derivative gain"
+      i_clamp_max:
+        type: double
+        default_value: 0.0
+        description: "Pitch velocity PID upper integral clamp"
+      i_clamp_min:
+        type: double
+        default_value: 0.0
+        description: "Pitch velocity PID lower integral clamp"
+    pid_pos:
+      p:
+        type: double
+        default_value: 0.0
+        description: "Pitch position PID proportional gain"
+      i:
+        type: double
+        default_value: 0.0
+        description: "Pitch position PID integral gain"
+      d:
+        type: double
+        default_value: 0.0
+        description: "Pitch position PID derivative gain"
+      i_clamp_max:
+        type: double
+        default_value: 0.0
+        description: "Pitch position PID upper integral clamp"
+      i_clamp_min:
+        type: double
+        default_value: 0.0
+        description: "Pitch position PID lower integral clamp"
+    limits:
+      max_position:
+        type: double
+        default_value: 0.0
+        description: "Pitch joint upper position limit (rad)"
+      min_position:
+        type: double
+        default_value: 0.0
+        description: "Pitch joint lower position limit (rad)"
+      max_velocity:
+        type: double
+        default_value: 0.0
+        description: "Pitch joint velocity limit (rad/s)"
+      max_effort:
+        type: double
+        default_value: 0.0
+        description: "Pitch joint effort limit"
+    parent_link:
+      type: string
+      default_value: ""
+      description: "Parent link of pitch joint"
+
+  feedforward:
+    enable:
+      type: bool
+      default_value: false
+      description: "Enable gravity feedforward compensation"
+    mass_origin:
+      x:
+        type: double
+        default_value: 0.0
+        description: "Pitch mass origin x offset (m)"
+      z:
+        type: double
+        default_value: 0.0
+        description: "Pitch mass origin z offset (m)"
+    gravity:
+      type: double
+      default_value: 9.8
+      description: "Gravitational acceleration (m/s^2)"
+
+  yaw_k_v:
+    type: double
+    default_value: 0.0
+    description: "Yaw velocity feedforward scale factor"
+
+  pitch_k_v:
+    type: double
+    default_value: 0.0
+    description: "Pitch velocity feedforward scale factor"
+
+  chassis_compensation:
+    a:
+      type: double
+      default_value: 0.0
+      description: "Chassis angular velocity compensation sinusoidal amplitude"
+    b:
+      type: double
+      default_value: 0.0
+      description: "Chassis angular velocity compensation sinusoidal frequency"
+    c:
+      type: double
+      default_value: 0.0
+      description: "Chassis angular velocity compensation sinusoidal phase"
+    d:
+      type: double
+      default_value: 0.0
+      description: "Chassis angular velocity compensation constant offset"
+
+  accel_pitch:
+    type: double_array
+    default_value: []
+    description: "Pitch acceleration model polynomial coefficients"
+
+  accel_yaw:
+    type: double_array
+    default_value: []
+    description: "Yaw acceleration model polynomial coefficients"
+
+  chassis_vel:
+    cutoff_frequency:
+      type: double
+      default_value: 20.0
+      description: "Chassis velocity low-pass filter cutoff frequency (Hz)"
+      validation:
+        gt<>: [0.0]
+
+  bullet_solver:
+    resistance_coff:
+      type: double
+      default_value: 0.0
+      description: "Bullet air resistance coefficient"
+    resistance_coff_qd_10:
+      type: double
+      default_value: 0.0
+      description: "Bullet air resistance coefficient at 10 m/s"
+    resistance_coff_qd_15:
+      type: double
+      default_value: 0.0
+      description: "Bullet air resistance coefficient at 15 m/s"
+    resistance_coff_qd_16:
+      type: double
+      default_value: 0.0
+      description: "Bullet air resistance coefficient at 16 m/s"
+    resistance_coff_qd_18:
+      type: double
+      default_value: 0.0
+      description: "Bullet air resistance coefficient at 18 m/s"
+    resistance_coff_qd_30:
+      type: double
+      default_value: 0.0
+      description: "Bullet air resistance coefficient at 30 m/s"
+    g:
+      type: double
+      default_value: 9.8
+      description: "Gravitational acceleration used in bullet solver (m/s^2)"
+    max_iter:
+      type: int
+      default_value: 20
+      description: "Maximum iterations for bullet solver"
+
+  imu_name:
+    type: string
+    default_value: ""
+    description: "IMU sensor name (empty means no IMU)"
+
+  imu_frame_id:
+    type: string
+    default_value: "imu_link"
+    description: "IMU frame ID"
+
+  publish_rate:
+    type: double
+    default_value: 100.0
+    description: "Debug topic publish rate (Hz)"
+    validation:
+      gt<>: [0.0]
