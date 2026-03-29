@@ -3,8 +3,11 @@ install/
 log/
 .cache/
 .vscode/
+.idea/
+.colcon/
 reference/
 tmp/
+src/ros2_controllers/
 1
 *.md
 !README.md
