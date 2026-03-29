@@ -25,6 +25,7 @@ find_package(rm2_msgs REQUIRED)
 find_package(control_msgs REQUIRED)
 find_package(geometry_msgs REQUIRED)
 find_package(pal_statistics REQUIRED)
+find_package(generate_parameter_library REQUIRED)
 
 set(DEPENDENCIES
     rclcpp
@@ -47,6 +48,11 @@ set(DEPENDENCIES
     pal_statistics
 )
 
+generate_parameter_library(
+  gimbal_controller_parameters
+  src/gimbal_controller_parameters.yaml
+)
+
 add_library(${PROJECT_NAME} SHARED
   src/gimbal_base.cpp
   src/joint_controller.cpp
@@ -66,11 +72,13 @@ ament_target_dependencies(${PROJECT_NAME} PUBLIC
   ${DEPENDENCIES}
 )
 
+target_link_libraries(${PROJECT_NAME} PUBLIC gimbal_controller_parameters)
+
 ament_export_include_directories(include)
 ament_export_libraries(${PROJECT_NAME})
 ament_export_dependencies(${DEPENDENCIES})
 
-install(TARGETS ${PROJECT_NAME}
+install(TARGETS ${PROJECT_NAME} gimbal_controller_parameters
     EXPORT ${PROJECT_NAME}_targets
     ARCHIVE DESTINATION lib
     LIBRARY DESTINATION lib

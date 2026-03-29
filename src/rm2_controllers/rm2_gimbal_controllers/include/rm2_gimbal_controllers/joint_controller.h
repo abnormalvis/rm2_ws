@@ -1,5 +1,6 @@
 #pragma once
 
+#include <control_toolbox/pid_ros.hpp>
 #include <hardware_interface/loaned_command_interface.hpp>
 #include <hardware_interface/loaned_state_interface.hpp>
 #include <limits>
@@ -56,24 +57,11 @@ public:
   JointLimits joint_limits_;
 
 private:
-  double pos_p_gain_ = 0.0;
-  double pos_i_gain_ = 0.0;
-  double pos_d_gain_ = 0.0;
-  double pos_i_max_ = 0.0;
-  double pos_i_min_ = 0.0;
-
-  double vel_p_gain_ = 0.0;
-  double vel_i_gain_ = 0.0;
-  double vel_d_gain_ = 0.0;
-  double vel_i_max_ = 0.0;
-  double vel_i_min_ = 0.0;
+  std::shared_ptr<control_toolbox::PidROS> pos_pid_;
+  std::shared_ptr<control_toolbox::PidROS> vel_pid_;
 
   double position_error_ = 0.0;
-  double position_error_last_ = 0.0;
   double velocity_error_ = 0.0;
-  double velocity_error_last_ = 0.0;
-  double pos_integral_error_ = 0.0;
-  double vel_integral_error_ = 0.0;
   double outer_loop_velocity_reference_ = 0.0;
 
   struct Command {

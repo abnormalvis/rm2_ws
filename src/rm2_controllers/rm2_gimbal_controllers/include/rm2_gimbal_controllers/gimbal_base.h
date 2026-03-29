@@ -241,16 +241,23 @@ protected:
 
   // 动态调参
 
-private:
+protected:
   rcl_interfaces::msg::SetParametersResult
   paramCallback(const std::vector<rclcpp::Parameter> &parameters);
 
   rclcpp::node_interfaces::OnSetParametersCallbackHandle::SharedPtr
-      param_cb_handle_;
+    param_cb_handle_;
 
+  // 控制指令回调函数
+  void commandCallback(rm2_msgs::msg::GimbalCmd::ConstSharedPtr msg);
+  void trackCallback(rm2_msgs::msg::TrackData::ConstSharedPtr msg);
+  void targetAngleCallback(
+    geometry_msgs::msg::Vector3Stamped::ConstSharedPtr msg);
+
+private:
   // 初始化方法
   void assignIMUinterfaces(
-      std::vector<hardware_interface::LoanedStateInterface> &interfaces);
+    std::vector<hardware_interface::LoanedStateInterface> &interfaces);
 
   // 控制模式方法
   void rate(const rclcpp::Time &time, const rclcpp::Duration &period);
@@ -275,12 +282,6 @@ private:
 
   double updateCompensation(double chassis_vel_angular_z);
   double feedForwardPitch(const rclcpp::Time &time);
-
-  // 控制指令回调函数
-  void commandCallback(rm2_msgs::msg::GimbalCmd::ConstSharedPtr msg);
-  void trackCallback(rm2_msgs::msg::TrackData::ConstSharedPtr msg);
-  void targetAngleCallback(
-      geometry_msgs::msg::Vector3Stamped::ConstSharedPtr msg);
 };
 
 } // namespace rm2_gimbal_controllers
